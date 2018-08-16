@@ -1,4 +1,4 @@
-module Start
+module MultipleReturns
 
 open Expecto
 
@@ -12,7 +12,7 @@ let trace = TraceBuilder()
 
 [<Tests>]
 let tests =
-    testList "traces" [
+    testList "multiple returns" [
         test "TraceBuilder returns value" {
             let expected = 1
             let actual = trace { return expected }
@@ -27,4 +27,17 @@ let tests =
             }
             Expect.equal actual (expected + expected) "Actual should match expected + expected"
         }
+
+        (*
+        test "TraceBuilder can return multiple times" {
+            let expected = 1
+            let actual = trace {
+                let! result = expected + expected
+                return result
+                return 2
+            }
+            Expect.equal actual (expected + expected) "Actual should match expected + expected"
+        }
+        *)
     ]
+

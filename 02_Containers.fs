@@ -1,15 +1,15 @@
 module Containers
 
-open System.Text
+open System
 open Expecto
 
-type Trace<'T> = Trace of 'T * StringBuilder
+type Trace<'T> = Trace of 'T * string list
 
 type TraceBuilder() =
-    member __.Return(value) = Trace(value, StringBuilder())
+    member __.Return(value) = Trace(value, [])
     (*
-    member __.Run(Trace(v,sb)) =
-        printfn "%s" (sb.ToString())
+    member __.Run(Trace(v,log)) =
+        for l in log do printfn "%s" l
         v
     *)
 
@@ -22,10 +22,10 @@ let tests =
             "new trace can return a value", fun (Trace(actual,_)) () ->
                 Expect.equal actual 1 "Trace should return 1"
 
-            "new trace returns a trace as a StringBuilder", fun (Trace(_,sb)) () ->
-                Expect.equal (sb.GetType()) typeof<StringBuilder> "Trace should return a string builder as state."
+            "new trace returns a trace as a StringBuilder", fun (Trace(_,log)) () ->
+                Expect.equal (log.GetType()) typeof<string list> "Trace should return a string list as state."
 
-            "new trace returns a trace as a StringBuilder with an empty string", fun (Trace(_,sb)) () ->
-                Expect.equal (sb.ToString()) "" "Trace should return an empty string builder."
+            "new trace returns a trace as a StringBuilder with an empty string", fun (Trace(_,log)) () ->
+                Expect.equal log [] "Trace should return an empty string list."
         ] |> List.ofSeq
     )

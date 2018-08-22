@@ -3,68 +3,69 @@ module FizzBuzz
 open Expecto
 
 type FizzBuzzState =
-    | Pass of next : int
+    | Pass
     | Fail of failedOn : int
+    | Next of int list
 
 let bind f m =
     match m with
-    | Pass x -> f x
+    | Pass -> Fail -1
     | Fail x -> Fail x
+    | Next x -> f x
 
 type Checker() =
-    member __.Bind(m, f) =
-        printfn "Binding %A" m
-        bind f m
+    member __.For(source:seq<int>, f) =
+        bind f (Next(List.ofSeq source))
     member __.Yield(n) =
-        printfn "Yielding %i" n
-        Pass n
-    member __.Combine(m, f) =
-        printfn "Combining"
-        match m with
-        | Pass x ->
-            printfn "Calling f with %i" (x+1)
-            f(x+1)
-        | Fail x -> Fail x
+        Next n
     member __.Delay(f) = f
-
     member __.Run(f) =
         match f() with
-        | Pass _ -> printfn "passed!"
+        | Pass -> printfn "passed!"
         | Fail x -> eprintfn "failed on %i" x
+        | Next x -> eprintfn "incomplete: %A" x
 
-    [<CustomOperation("num", MaintainsVariableSpace=true)>]
+    [<CustomOperation("num")>]
     member __.Number(m, n) =
-        bind (fun x -> printfn "%i" x
-                       if n = x && x % 3 <> 0 && x % 5 <> 0
-                       then Pass(x+1)
-                       else Fail x) m
+        bind (fun xs ->
+            match xs with
+            | [] -> Fail n
+            | [x] when n = x && x % 3 <> 0 && x % 5 <> 0 -> Pass
+            | x::xs when n = x && x % 3 <> 0 && x % 5 <> 0 -> Next xs
+            | x::_ -> Fail x) m
 
-    [<CustomOperation("fizz", MaintainsVariableSpace=true)>]
+    [<CustomOperation("fizz")>]
     member __.Fizz(m) =
-        bind (fun x -> printfn "fizz %i" x
-                       if x % 3 = 0 && x % 5 <> 0
-                       then Pass(x+1)
-                       else Fail x) m
+        bind (fun xs ->
+            match xs with
+            | [] -> Fail -1
+            | [x] when x % 3 = 0 && x % 5 <> 0 -> Pass
+            | x::xs when x % 3 = 0 && x % 5 <> 0 -> Next xs
+            | x::_ -> Fail x) m
 
-    [<CustomOperation("buzz", MaintainsVariableSpace=true)>]
+    [<CustomOperation("buzz")>]
     member __.Buzz(m) =
-        bind (fun x -> printfn "buzz %i" x
-                       if x % 3 <> 0 && x % 5 = 0
-                       then Pass(x+1)
-                       else Fail x) m
+        bind (fun xs ->
+            match xs with
+            | [] -> Fail -1
+            | [x] when x % 3 <> 0 && x % 5 = 0 -> Pass
+            | x::xs when x % 3 <> 0 && x % 5 = 0 -> Next xs
+            | x::_ -> Fail x) m
 
-    [<CustomOperation("fizzbuzz", MaintainsVariableSpace=true)>]
+    [<CustomOperation("fizzbuzz")>]
     member __.FizzBuzz(m) =
-        bind (fun x -> printfn "fizzbuzz %i" x
-                       if x % 3 = 0 && x % 5 = 0
-                       then Pass(x+1)
-                       else Fail x) m
+        bind (fun xs ->
+            match xs with
+            | [] -> Fail -1
+            | [x] when x % 3 = 0 && x % 5 = 0 -> Pass
+            | x::xs when x % 3 = 0 && x % 5 = 0 -> Next xs
+            | x::_ -> Fail x) m
 
 let check = Checker()
 
 let pass =
     check {
-        let! i = Pass 1
+        for i in 1..15 do
         num 1
         num 2
         fizz
@@ -84,7 +85,7 @@ let pass =
 
 let fail =
     check {
-        let! i = Pass 1
+        for i in 1..15 do
         num 1
         num 2
         fizz
@@ -100,4 +101,38 @@ let fail =
         num 13
         num 14
         fizzbuzz
+    }
+
+let notEnough =
+    check {
+        for i in 1..15 do
+        num 1
+        num 2
+        fizz
+    }
+
+let tooMany =
+    check {
+        for i in 1..15 do
+        num 1
+        num 2
+        fizz
+        num 4
+        buzz
+        fizz
+        num 7
+        num 8
+        fizz
+        buzz
+        num 11
+        fizz
+        num 13
+        num 14
+        fizzbuzz
+        num 16
+        num 17
+        fizz
+        num 19
+        buzz
+        fizz
     }

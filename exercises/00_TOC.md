@@ -13,5 +13,7 @@
 
 ## Query Expressions
 
-1. Custom Operators (`query` & `fizzbuzz`)
+1. Custom Operations
+    1. `query`
+    2. Are you smarter than a FizzBuzz? (`FizzBuzzChecker`)
 

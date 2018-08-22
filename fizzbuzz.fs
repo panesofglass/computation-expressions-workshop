@@ -1,7 +1,5 @@
 module FizzBuzz
 
-open Expecto
-
 type FizzBuzzState =
     | Pass
     | Fail of failedOn : int
@@ -22,44 +20,33 @@ type Checker() =
     member __.Run(f) =
         match f() with
         | Pass -> printfn "passed!"
+        | Fail -1 -> eprintfn "exceeded range!"
         | Fail x -> eprintfn "failed on %i" x
         | Next x -> eprintfn "incomplete: %A" x
+    
+    member __.FilterBind(m, f) =
+        bind (fun xs ->
+            match xs with
+            | [] -> Fail -1
+            | [x] when f x -> Pass
+            | x::xs when f x -> Next xs
+            | x::_ -> Fail x) m
 
     [<CustomOperation("num")>]
     member __.Number(m, n) =
-        bind (fun xs ->
-            match xs with
-            | [] -> Fail n
-            | [x] when n = x && x % 3 <> 0 && x % 5 <> 0 -> Pass
-            | x::xs when n = x && x % 3 <> 0 && x % 5 <> 0 -> Next xs
-            | x::_ -> Fail x) m
+        __.FilterBind(m, fun x -> n = x && x % 3 <> 0 && x % 5 <> 0)
 
     [<CustomOperation("fizz")>]
     member __.Fizz(m) =
-        bind (fun xs ->
-            match xs with
-            | [] -> Fail -1
-            | [x] when x % 3 = 0 && x % 5 <> 0 -> Pass
-            | x::xs when x % 3 = 0 && x % 5 <> 0 -> Next xs
-            | x::_ -> Fail x) m
+        __.FilterBind(m, fun x -> x % 3 = 0 && x % 5 <> 0)
 
     [<CustomOperation("buzz")>]
     member __.Buzz(m) =
-        bind (fun xs ->
-            match xs with
-            | [] -> Fail -1
-            | [x] when x % 3 <> 0 && x % 5 = 0 -> Pass
-            | x::xs when x % 3 <> 0 && x % 5 = 0 -> Next xs
-            | x::_ -> Fail x) m
+        __.FilterBind(m, fun x -> x % 3 <> 0 && x % 5 = 0)
 
     [<CustomOperation("fizzbuzz")>]
     member __.FizzBuzz(m) =
-        bind (fun xs ->
-            match xs with
-            | [] -> Fail -1
-            | [x] when x % 3 = 0 && x % 5 = 0 -> Pass
-            | x::xs when x % 3 = 0 && x % 5 = 0 -> Next xs
-            | x::_ -> Fail x) m
+        __.FilterBind(m, fun x -> x % 3 = 0 && x % 5 = 0)
 
 let check = Checker()
 

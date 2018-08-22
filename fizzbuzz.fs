@@ -33,9 +33,9 @@ type Checker() =
         | Fail x -> eprintfn "failed on %i" x
 
     [<CustomOperation("num", MaintainsVariableSpace=true)>]
-    member __.Number(m, [<ProjectionParameter>] f) =
+    member __.Number(m, n) =
         bind (fun x -> printfn "%i" x
-                       if f x && x % 3 <> 0 && x % 5 <> 0
+                       if n = x && x % 3 <> 0 && x % 5 <> 0
                        then Pass(x+1)
                        else Fail x) m
 
@@ -65,39 +65,39 @@ let check = Checker()
 let pass =
     check {
         let! i = Pass 1
-        num (i = 1)
-        num (i = 2)
+        num 1
+        num 2
         fizz
-        num (i = 4)
+        num 4
         buzz
         fizz
-        num (i = 7)
-        num (i = 8)
+        num 7
+        num 8
         fizz
         buzz
-        num (i = 11)
+        num 11
         fizz
-        num (i = 13)
-        num (i = 14)
+        num 13
+        num 14
         fizzbuzz
     }
 
 let fail =
     check {
         let! i = Pass 1
-        num (i = 1)
-        num (i = 2)
+        num 1
+        num 2
         fizz
-        num (i = 4)
+        num 4
         buzz
         fizz
-        num (i = 7)
-        num (i = 8)
+        num 7
+        num 8
         fizz
         buzz
-        num (i = 11)
-        num (i = 12)
-        num (i = 13)
-        num (i = 14)
+        num 11
+        num 12
+        num 13
+        num 14
         fizzbuzz
     }

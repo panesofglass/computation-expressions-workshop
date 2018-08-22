@@ -22,6 +22,7 @@
     <Compile Include="02_Containers.fs" />
     <Compile Include="03_MultipleReturns.fs" />
     <Compile Include="04_Choices.fs" />
+    <Compile Include="fizzbuzz.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

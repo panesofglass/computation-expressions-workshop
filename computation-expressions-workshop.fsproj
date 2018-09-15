@@ -17,12 +17,17 @@
   </ItemGroup> 
 
   <ItemGroup>
-    <Compile Include="00_Return.fs" />
-    <Compile Include="01_Bind.fs" />
-    <Compile Include="02_Containers.fs" />
-    <Compile Include="03_MultipleReturns.fs" />
-    <Compile Include="04_Choices.fs" />
-    <Compile Include="fizzbuzz.fs" />
+    <None Include="exercises\00_Return.md" />
+    <None Include="exercises\01_Bind.md" />
+    <None Include="exercises\02_Containers.md" />
+    <None Include="exercises\03_MultipleReturns.md" />
+    <None Include="exercises\04_Choices.md" />
+    <Compile Include="solutions\00_Return.fs" />
+    <Compile Include="solutions\01_Bind.fs" />
+    <Compile Include="solutions\02_Containers.fs" />
+    <Compile Include="solutions\03_MultipleReturns.fs" />
+    <Compile Include="solutions\04_Choices.fs" />
+    <Compile Include="solutions\fizzbuzz.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

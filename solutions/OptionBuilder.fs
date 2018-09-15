@@ -4,7 +4,7 @@ open Expecto
 
 let opt1 = Some 1
 let opt2 = Some 2
-let opt3 = Some 3
+let opt3 = None
 let opt4 = Some 4
 let sum4 w x y z = w + x + y + z
 
@@ -16,7 +16,11 @@ let nested =
             match opt3 with
             | Some y ->
                 match opt4 with
-                | Some z -> Some(sum4 w x y z)
+                | Some z ->
+                    let result = sum4 w x y z
+                    // Print the result if successful
+                    printfn "%d" result
+                    Some result
                 | None -> None
             | None -> None
         | None -> None
@@ -31,7 +35,10 @@ let composed =
             |> Option.bind (fun y ->
                 opt4
                 |> Option.map (fun z ->
-                    sum4 w x y z
+                    let result = sum4 w x y z
+                    // Print the result if successful
+                    printfn "%d" result
+                    result
                 )
             )
         )
@@ -40,6 +47,7 @@ let composed =
 //type OptionBuilder() = class end
 type OptionBuilder() =
     member __.Return(value) = Some value
+    member __.Bind(m, f) = Option.bind f m
 
 let maybe = OptionBuilder()
 
@@ -54,5 +62,18 @@ let tests =
             let expected = 1
             let actual = maybe { return expected }
             Expect.equal actual (Some expected) "Expected Some 1"
+        }
+
+        test "OptionBuilder can bind option values" {
+            let actual = maybe {
+                let! w = opt1
+                let! x = opt2
+                let! y = opt3
+                let! z = opt4
+                let result = sum4 w x y z
+                printfn "%d" result // print if a result was computed.
+                return result
+            }
+            Expect.equal actual nested "Actual should sum to the same value as nested."
         }
     ]

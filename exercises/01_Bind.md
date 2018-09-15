@@ -35,7 +35,7 @@ The compiler informs us that in order to use the `let!` keyword, we must impleme
     f m
 ```
 
-The `Bind
+The `Bind`
 What are `m` and `f`? Our side effect should print them out.
 
 Running the program with `dotnet test` again, you should see that you have two passing tests.

@@ -3,7 +3,9 @@ module Choose
 open Expecto
 
 type ChoiceBuilder() =
-    member __.ReturnFrom(m:_ option) = m
+    member __.ReturnFrom(m:'a option) =
+        printfn "choose.ReturnFrom(%A)" m
+        m
     
     (*
     // First attempt

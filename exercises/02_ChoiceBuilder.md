@@ -20,16 +20,119 @@ module Choose
 
 open Expecto
 
+type ChoiceBuilder() = class end
+```
+
+## Interlude
+
+Before we get to far, observe that due to CE's use of classes, we can re-use functionality by means of inheritance. I don't advise doing this as a regular practice, but it can be useful in some cases. We'll use it here only to illustrate that you _can_.
+
+``` fsharp
+open Options
+
 type ChoiceBuilder() =
-    member __.ReturnFrom(m:'a option) =
-        printfn "choose.ReturnFrom(%A)" m
-        m
+    inherit OptionBuilder()
 
 let choose = ChoiceBuilder()
 
 [<Tests>]
 let tests =
     testList "choices" [
+        test "ChoiceBuilder returns value" {
+            let expected = 1
+            let actual = choose { return expected }
+            Expect.equal actual (Some expected) "Expected Some 1"
+        }
+
+        test "ChoiceBuilder can bind option values" {
+            let actual = choose {
+                let! w = opt1
+                let! x = opt2
+                let! y = opt3
+                let! z = opt4
+                let result = sum4 w x y z
+                printfn "Result: %d" result // print if a result was computed.
+                return result
+            }
+            Expect.equal actual nested "Actual should sum to the same value as nested."
+        }
+
+        test "ChoiceBuilder instance can be used directly" {
+            let actual =
+                choose.Bind(opt1, fun w ->
+                    choose.Bind(opt2, fun x ->
+                        choose.Bind(opt3, fun y ->
+                            choose.Bind(opt4, fun z ->
+                                let result = sum4 w x y z
+                                printfn "Result: %d" result
+                                choose.Return(result)
+                            )
+                        )
+                    )
+                )
+            Expect.equal actual composed "Actual should sum to the same value as nested."
+        }
+
+        test "ChoiceBuilder can exit without returning a value" {
+            let dirExists path =
+                let fileInfo = System.IO.FileInfo(path)
+                let fileName = fileInfo.Name
+                let pathDir = fileInfo.Directory.FullName.TrimEnd('~')
+                if System.IO.Directory.Exists(pathDir) then
+                    Some (System.IO.Path.Combine(pathDir, fileName))
+                else None
+
+            let choosePath = Some "~/test.txt"
+
+            let actual =
+                choose {
+                    let! path = choosePath
+                    let! fullPath = dirExists path
+                    System.IO.File.WriteAllText(fullPath, "Test succeeded")
+                }
+
+            Expect.equal actual None "Actual should be Some unit"
+        }
+
+        test "ChoiceBuilder supports if then without an else" {
+            let choosePath = Some "~/test.txt"
+
+            let actual =
+                choose {
+                    let! path = choosePath
+                    let pathDir = System.IO.Path.GetDirectoryName(path)
+                    if not(System.IO.Directory.Exists(pathDir)) then
+                        return "Select a valid path."
+                }
+
+            Expect.equal actual (Some "Select a valid path.") "Actual should return Some(\"Select a valid path.\")"
+        }
+
+        test "ChoiceBuilder allows for early escape with return!" {
+            let actual =
+                choose {
+                    if true then
+                        return! None
+                    else
+                        let! w = opt1
+                        let! x = opt2
+                        let! y = opt3
+                        let! z = opt4
+                        let result = sum4 w x y z
+                        printfn "Result: %d" result // print if a result was computed.
+                        return result
+                }
+            Expect.equal actual None "Should return None immediately"
+        }
+    ]
+```
+
+Running `dotnet test` with this implementation should succeed and show that we are now ready to extend our builder. This is _one_ way to extend a builder if you don't want to accidentally break code using `maybe` elsewhere.
+
+## Combining Computations
+
+
+``` fsharp
         test "choose returns first value if it is Some" {
             let actual = choose {
                 return! Some 1
@@ -38,10 +141,7 @@ let tests =
             }
             Expect.equal actual (Some 1) "Expected the first value to be returned."
         }
-    ]
 ```
-
-## Combining Computations
 
 Run `dotnet test`. The project will once again fail to compile with a helpful error message:
 
@@ -49,10 +149,36 @@ Run `dotnet test`. The project will once again fail to compile with a helpful er
 /Users/ryan/Code/computation-expressions-workshop/solutions/ChoiceBuilder.fs(19,17): error FS0708: This control construct may only be used if the computation expression builder defines a 'Combine' method
 ```
 
+The standard signature for `Choose` from the specification would appear to indicate the correct implementation for our `ChoiceBuilder` is:
 
+``` fsharp
+member Combine : unit option * (unit -> 'a option) -> 'a option
+```
 
+This would work just fine if we wanted to continue in the case of a `Some ()`, as we initially started with in our `OptionBuilder`. However, we want to support a choice, where a `None` leads to the second path, not a `Some ()`. With that in mind, our signature needs to be slightly different:
+
+``` fsharp
+member Combine : 'a option * (unit -> 'a option) -> 'a option
+```
+
+This looks wrong at first blush, but it's a necessary evil to support a `None` return value:
+
+``` fsharp
+    member __.Combine(m:'a option, f:unit -> 'a option) =
+        match m with
+        | Some _ -> m
+        | None -> f()
+```
+
+Try to compile, and you'll find that the compiler is still not happy:
+
+```
+/Users/ryan/Code/computation-expressions-workshop/solutions/ChoiceBuilder.fs(125,17): error FS0708: This control construct may only be used if the computation expression builder defines a 'Delay' method
+```
 
 ## Delaying Execution
+
+
 
 When running this computation, the results are eagerly evaluated, including any `printfn` statements. To observe this behavior, change your code to match the following:
 

@@ -6,27 +6,55 @@ open Options
 type ChoiceBuilder() =
     inherit OptionBuilder()
     
+    (*
     // First attempt
     member __.Combine(m:'a option, f:unit -> 'a option) =
+        printfn "choose.Combine(%A, %A)" m f
         match m with
         | Some _ -> m
         | None -> f()
+    member __.Delay(f:unit -> _ option) =
+        printfn "choose.Delay(%A)" f
+        f()
+    *)
+
     (*
-    member __.Combine(m1, m2) =
+    // Second attempt
+    member __.Combine(m1:'a option, m2:'a option) =
+        printfn "choose.Combine(%A, %A)" m1 m2
         match m1 with
         | Some _ -> m1
         | None -> m2
-    member __.Delay(f:unit -> _ option) = f()
+    member __.Delay(f:unit -> _ option) =
+        printfn "choose.Delay(%A)" f
+        f()
     // NOTE: results in printing statements after return! due to delay not blocking further evaluation.
+    *)
 
-    // Second attempt
-    member __.Combine(m1, m2) =
+    (*
+    // Third attempt
+    member __.Combine(m1:'a option, m2:'a option) =
+        printfn "choose.Combine(%A, %A)" m1 m2
         match m1 with
         | Some _ -> m1
-        | None -> m2()
-    member __.Delay(f:unit -> _ option) = f
-    member __.Run(f:unit -> _ option) = f()
+        | None -> m2
+    member __.Delay(f:unit -> 'a option) =
+        printfn "choose.Delay(%A)" f
+        f
     *)
+
+    // Fourth attempt
+    member __.Combine(m:'a option, f:unit -> 'a option) =
+        printfn "choose.Combine(%A, %A)" m f
+        match m with
+        | Some _ -> m
+        | None -> f()
+    member __.Delay(f:unit -> 'a option) =
+        printfn "choose.Delay(%A)" f
+        f
+    member __.Run(f:unit -> _ option) =
+        printfn "choose.Run(%A)" f
+        f()
 
 let choose = ChoiceBuilder()
 
@@ -86,7 +114,7 @@ let tests =
                     System.IO.File.WriteAllText(fullPath, "Test succeeded")
                 }
 
-            Expect.equal actual None "Actual should be Some unit"
+            Expect.equal actual None "Actual should be None"
         }
 
         test "ChoiceBuilder supports if then without an else" {
@@ -129,6 +157,39 @@ let tests =
             Expect.equal actual (Some 1) "Expected the first value to be returned."
         }
 
+        (*
+        test "expanding choose for the second attempt runs the same way" {
+            let actual =
+                choose.Delay(fun () ->
+                    choose.ReturnFrom(Some 1)
+                    |> fun v1 ->
+                        choose.Delay(fun () ->
+                            printfn "returning first value?"
+                            choose.ReturnFrom(Some 2)
+                            |> fun v2 ->
+                                choose.Combine(v1, v2)
+                        )
+                )
+            Expect.equal actual (Some 1) "Expected the first value to be returned."
+        }
+        *)
+
+        test "expanding choose for the fourth attempt runs the same way" {
+            let actual =
+                choose.Run(
+                    choose.Delay(fun () ->
+                        choose.Combine(
+                            choose.ReturnFrom(Some 1), 
+                            choose.Delay(fun () ->
+                                printfn "returning first value?"
+                                choose.ReturnFrom(Some 2)
+                            )
+                        )
+                    )
+                )
+            Expect.equal actual (Some 1) "Expected the first value to be returned."
+        }
+
         test "choose returns second value if first is None" {
             let actual = choose {
                 return! None
@@ -149,5 +210,31 @@ let tests =
                 return! Some 7
             }
             Expect.equal actual (Some 7) "Expected the seventh value to be returned."
+        }
+
+        test "ChoiceBuilder can chain a computation onto another returning None, where None indicates success" {
+            let dirExists path =
+                let fileInfo = System.IO.FileInfo(path)
+                let fileName = fileInfo.Name
+                let pathDir = fileInfo.Directory.FullName.TrimEnd('~')
+                if System.IO.Directory.Exists(pathDir) then
+                    Some (System.IO.Path.Combine(pathDir, fileName))
+                else None
+
+            let choosePath = Some "~/test.txt"
+
+            let writeFile =
+                choose {
+                    let! path = choosePath
+                    let! fullPath = dirExists path
+                    System.IO.File.WriteAllText(fullPath, "Test succeeded")
+                }
+            let actual =
+                choose {
+                    return! writeFile
+                    return "Successfully wrote file"
+                }
+
+            Expect.equal actual (Some "Successfully wrote file") "Actual should indicate success"
         }
     ]

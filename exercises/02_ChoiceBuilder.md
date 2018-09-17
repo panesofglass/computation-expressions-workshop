@@ -165,6 +165,7 @@ This looks wrong at first blush, but it's a necessary evil to support a `None` r
 
 ``` fsharp
     member __.Combine(m:'a option, f:unit -> 'a option) =
+        printfn "choose.Combine(%A, %A)" m f
         match m with
         | Some _ -> m
         | None -> f()
@@ -178,109 +179,227 @@ Try to compile, and you'll find that the compiler is still not happy:
 
 ## Delaying Execution
 
-
-
-When running this computation, the results are eagerly evaluated, including any `printfn` statements. To observe this behavior, change your code to match the following:
+When running a computation expression, results are eagerly evaluated. `Delay` allows the computation to pause. `Delay` is generally defined as:
 
 ``` fsharp
-let opt1 = Some 1
-let opt2 = Some 2
-let opt3 = Some 3
-let opt4 = Some 4
-let sum4 w x y z = w + x + y + z
-
-let nested =
-    match opt1 with
-    | Some w ->
-        match opt2 with
-        | Some x ->
-            match opt3 with
-            | Some y ->
-                match opt4 with
-                | Some z ->
-                    let result = sum4 w x y z
-                    // Print the result if successful
-                    printfn "Nested: %d" result
-                    Some result
-                | None -> None
-            | None -> None
-        | None -> None
-    | None -> None
-
-let composed =
-    opt1
-    |> Option.bind (fun w ->
-        opt2
-        |> Option.bind (fun x ->
-            opt3
-            |> Option.bind (fun y ->
-                opt4
-                |> Option.map (fun z ->
-                    let result = sum4 w x y z
-                    // Print the result if successful
-                    printfn "Composed: %d" result
-                    result
-                )
-            )
-        )
-    )
-
-// ... then in your test:
-
-        test "OptionBuilder can bind option values" {
-            let actual = maybe {
-                let! w = opt1
-                let! x = opt2
-                let! y = opt3
-                let! z = opt4
-                let result = sum4 w x y z
-                printfn "Result: %d" result // print if a result was computed.
-                return result
-            }
-            Expect.equal actual nested "Actual should sum to the same value as nested."
-        }
-// ...
+member Delay : (unit -> 'a option) -> 'a option
 ```
 
-Running these changes with `dotnet test` should succeed, and you should see printed console output for `Nested: 10`, `Computed: 10`, and `Result: 10`.
+or for our computation,
 
-It's possible to have the computation expression delay execution until you are ready by implementing the `Delay` member:
+``` fsharp
+    member __.Delay(f:unit -> 'a option) =
+        printfn "choose.Delay(%A)" f
+        f()
+```
+
+`Delay` essentially wraps your expression in a function that takes a `unit` parameter in order to force something to request execution. There is no requirement on the return type, and we'll see why this is useful shortly.
+
+The compiler will now inform you that the signature for `Combine` is incorrect:
+
+```
+/Users/ryan/Code/computation-expressions-workshop/solutions/ChoiceBuilder.fs(32,17): error FS0001: This expression was expected to have type
+    'unit -> int option'
+but here has type
+    'int option'
+```
+
+``` fsharp
+    member __.Combine(m1:'a option, m2:'a option) =
+        printfn "choose.Combine(%A, %A)" m1 m2
+        match m1 with
+        | Some _ -> m1
+        | None -> m2
+```
+
+`Combine` now takes two `'a option` types. Because of our implementation, the type arguments must match. This isn't required for the signature of `Combine`, as should be clear from our initial attempt.
+
+The compiler is finally happy. Run `dotnet test` to see your test pass, as well as the print out of what methods were called:
+
+```
+choose.Delay(<fun:actual@63>)
+maybe.ReturnFrom(Some 1)
+choose.Delay(<fun:actual@64-1>)
+returning first value?
+maybe.ReturnFrom(Some 2)
+choose.Combine(Some 1, Some 2)
+val actual : int option = Some 1
+```
+
+The output betrays a few issues. Here's the expanded form:
+
+``` fsharp
+        test "expanding choose for the second attempt runs the same way" {
+            let actual =
+                choose.Delay(fun () ->
+                    choose.Combine(
+                        choose.ReturnFrom(Some 1), 
+                        choose.Delay(fun () ->
+                            printfn "returning first value?"
+                            choose.ReturnFrom(Some 2)
+                        )
+                    )
+                )
+            Expect.equal actual (Some 1) "Expected the first value to be returned."
+        }
+```
+
+Notice that in order to return the result, the computation _will_ evaluate both paths because `Delay` evaluates immediately, even though the second path need not be evaluated in this case. Aside from the order of the `printfn` output from the method calls, `"returning first value?"` is also printed.
+
+It's possible to have the computation expression delay execution until you are ready by changing the implementation of the `Delay` member:
 
 ``` fsharp
     member __.Delay(f:unit -> 'a option) = f
 ```
 
-`Delay` takes a function and returns it without doing anything with it. What does the compiler do with this?
-
-Running `dotnet test` fails the test and produces the following result:
+`Delay` takes a function and returns it without doing anything with it. However, the compiler is unhappy:
 
 ```
-val actual : (unit -> int option)
+/Users/ryan/Code/computation-expressions-workshop/solutions/ChoiceBuilder.fs(361,17): error FS0001: This expression was expected to have type
+    'int option'
+but here has type
+    'unit -> int option'
+```
+
+`Combine` is now incorrect. Fortunately, we can just restore it to what we had before:
+
+``` fsharp
+    member __.Combine(m:'a option, f:unit -> 'a option) =
+        printfn "choose.Combine(%A, %A)" m f
+        match m with
+        | Some _ -> m
+        | None -> f()
+```
+
+Running `dotnet test` fails to compile and produces the following result:
+
+```
+/Users/ryan/Code/computation-expressions-workshop/solutions/ChoiceBuilder.fs(69,26): error FS0001: The type '(unit -> int option)' does not support the 'equality' constraint because it is a function type
 ```
 
 Our `actual` value is now a function that must be called. We can do several things with this now:
 
-* Let the user call this when necessary
+* Let the user call this after returning the value
 * Add a `runMaybe` function that accepts a `unit -> 'a option` and runs it
 * Wrap this as a `Lazy<_>` value to avoid repeat executions
+* Implement the `Run` member for computation expressions
 
-We could fix this by just calling `f()` in our `Delay` member defintion, but that would only produce the same behavior as we currently have. What we need to add is another member, `Run`:
-
-``` fsharp
-    member __.Run(f:unit -> 'a option) = f()
-```
-
-Aside from reading the specification, it can be useful to add traces or `printfn` statements into your CE builder definition while developing it. Let's do that now:
+Because the implementation is valid, the compiler won't tell you to implement `Run`. However, you'll likely want this to avoid having to explicitly evaluate the result at the end of each computation. From the specification, `Run`, if implemented, is wrapped around the computation expression and can be used to do almost anything. For our purposes, we'll have it just execute the delayed expression:
 
 ``` fsharp
-type OptionBuilder() =
-    member __.Return(value) =
-        printfn "maybe.Return(%A)" value
-        Some value
-    member __.Bind(m, f) =
-        printfn "maybe.Bind(%A, %A)" m f
-        Option.bind f m
-    member __.Delay(f: 'a option) =
-        printfn "maybe.Delay(%A)" f
-        f
+    member __.Run(f:unit -> 'a option) =
+        printfn "choose.Run(%A)" f
+        f()
 ```
+
+The previous test we added to compare the expanded form will now break, so just comment it out or remove it and run `dotnet test`. Your tests should pass, and you should no longer see `"returning first value?"` printed in the output.
+
+```
+choose.Delay(<fun:actual@427-14>)
+choose.Run(<fun:actual@427-14>)
+maybe.ReturnFrom(Some 1)
+choose.Delay(<fun:actual@428-15>)
+choose.Combine(Some 1, <fun:actual@428-15>)
+val actual : int option = Some 1
+```
+
+Here's the expanded form now that we have delayed the computation:
+
+``` fsharp
+        test "expanding choose for the fourth attempt runs the same way" {
+            let actual =
+                choose.Run(
+                    choose.Delay(fun () ->
+                        choose.Combine(
+                            choose.ReturnFrom(Some 1), 
+                            choose.Delay(fun () ->
+                                printfn "returning first value?"
+                                choose.ReturnFrom(Some 2)
+                            )
+                        )
+                    )
+                )
+            Expect.equal actual (Some 1) "Expected the first value to be returned."
+        }
+```
+
+Notice that `Run` wraps the entire expression now. Also, the second argument to `Combine` is now the delayed expression rather than the evaluated result of the delayed expression because `Delay` _does not_ immediately invoke its provided function. `Combine` is now responsible for invoking the provided function, just as `Run` is responsible for invoking the top-level delayed function.
+
+For good measure, let's add tests to verify:
+
+1. the second path _will_ be evaluated if the first is `None`
+2. more than two returns are supported
+
+``` fsharp
+        test "choose returns second value if first is None" {
+            let actual = choose {
+                return! None
+                printfn "returning second value?"
+                return! Some 2
+            }
+            Expect.equal actual (Some 2) "Expected the second value to be returned."
+        }
+
+        test "choose returns the last value if all previous are None" {
+            let actual = choose {
+                return! None
+                return! None
+                return! None
+                return! None
+                return! None
+                return! None
+                return! Some 7
+            }
+            Expect.equal actual (Some 7) "Expected the seventh value to be returned."
+        }
+```
+
+Running `dotnet test` should compile and pass all tests.
+
+## Chaining Computations
+
+Can we now go back to our file writing computation and chain additional work to the end of a successful, indicated by a `None`, file write?
+
+``` fsharp
+        test "ChoiceBuilder can chain a computation onto another returning None, where None indicates success" {
+            let dirExists path =
+                let fileInfo = System.IO.FileInfo(path)
+                let fileName = fileInfo.Name
+                let pathDir = fileInfo.Directory.FullName.TrimEnd('~')
+                if System.IO.Directory.Exists(pathDir) then
+                    Some (System.IO.Path.Combine(pathDir, fileName))
+                else None
+
+            let choosePath = Some "~/test.txt"
+
+            let writeFile =
+                choose {
+                    let! path = choosePath
+                    let! fullPath = dirExists path
+                    System.IO.File.WriteAllText(fullPath, "Test succeeded")
+                }
+            let actual =
+                choose {
+                    return! writeFile
+                    return "Successfully wrote file"
+                }
+
+            Expect.equal actual (Some "Successfully wrote file") "Actual should indicate success"
+        }
+```
+
+Running `dotnet test` should successfully run all tests.
+
+## Review
+
+In this exercise, we implemented the following members, many in several, different ways:
+
+* `Combine`
+* `Delay`
+* `Run`
+
+You should be getting the idea that computation expressions _do not_ adhere to strict or rigid type signatures but can be implemented to solve different problems depending on your use case.
+
+We also observed that, since computation expression builders are just .NET classes, you can also use inheritance and the full range of OO programming.
+
+So far, we've only looked at "wrapper" or "container" types, types that wrap a value in some way. Another example would be the `Result` type. In the next section, we'll look at writing computation expressions around function types.

@@ -58,6 +58,28 @@ type ChoiceBuilder() =
 
 let choose = ChoiceBuilder()
 
+// Not in exercise:
+// A benefit of using classes for this feature is that we can produce
+// different extensions from the same core builder implementation.
+// This one uses `Combine` to produce a builder that can apply wrapped
+// functions on wrapped arguments, or an applicative functor.
+type OptionApplicative() =
+    inherit OptionBuilder()
+
+    member __.Combine(f:('a -> _) option, m: unit -> 'a option) =
+        printfn "choose.Combine(%A, %A)" f m
+        match f, m() with
+        | Some f', Some m' -> Some(f' m')
+        | _ -> None
+    member __.Delay(f:unit -> 'a option) =
+        printfn "choose.Delay(%A)" f
+        f
+    member __.Run(f:unit -> _ option) =
+        printfn "choose.Run(%A)" f
+        f()
+
+let optApp = OptionApplicative()
+
 [<Tests>]
 let tests =
     testList "choices" [
@@ -237,4 +259,14 @@ let tests =
 
             Expect.equal actual (Some "Successfully wrote file") "Actual should indicate success"
         }
+
+        test "optApp applies a wrapped function to a wrapped argument" {
+            let actual = optApp {
+                return ((+) 1)
+                printfn "returning first value?"
+                return 2
+            }
+            Expect.equal actual (Some 1) "Expected the first value to be returned."
+        }
+
     ]

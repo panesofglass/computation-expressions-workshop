@@ -39,7 +39,7 @@ type StateBuilder() =
     member __.ReturnFrom(m:State<'a, 's>) = m
     member __.Zero() = State.result ()
     member __.Delay(f) = State.bind f (State.result ())
-    member __.Combine(m1, m2) =
+    member __.Combine(m1:State<unit, 's>, m2:State<'a, 's>) =
         State.bind (fun () -> m2) m1
     member inline __.Combine(m1:State<'a, 's>, m2:State<'a, 's>) =
         fun s ->

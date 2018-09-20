@@ -275,7 +275,7 @@ Add the following test and observe the compiler error:
 Returning multiple values requires `Combine`, so let's implement it ... but how? Here, we once again land in difficult territory. This is a reasonable implementation:
 
 ``` fsharp
-    member __.Combine(m1, m2) =
+    member __.Combine(m1:State<unit, 's>, m2:State<'a, 's>) =
         // Carry state from m1 through to m2 while ignoring the value from m1.
         State.bind (fun () -> m2) m1
 ```

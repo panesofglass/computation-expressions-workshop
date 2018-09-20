@@ -11,6 +11,8 @@ module States
 open Expecto
 
 type StateBuilder() = class end
+
+let state = StateBuilder()
 ```
 
 ## `State`
@@ -111,4 +113,203 @@ type StateBuilder() =
 
 > **NOTE:** the type declarations are not required, but they can prove helpful when verifying the types are what you want.
 
+## Running a `State` Computation
 
+While the `maybe` and `choose` computations returned an `option` value, this one returns a computation. You'll generally find it helpful to create helper functions to run the computation. In the case of `State`, since we have a tuple in the result, it is helpful to create two:
+
+``` fsharp
+module State =
+    // ... previously defined functions
+
+    /// Evaluates the computation, returning the result value.
+    let eval (m:State<'a, 's>) (s:'s) = m s |> fst
+
+    /// Executes the computation, returning the final state.
+    let exec (m:State<'a, 's>) (s:'s) = m s |> snd
+```
+
+We'll also need a pair of functions to get and set the state:
+
+``` fsharp
+    /// Returns the state as the value.
+    let getState (s:'s) = s, s
+
+    /// Ignores the state passed in favor of the provided state value.
+    let setState (s:'s) = fun _ -> (), s
+```
+
+Next add some tests to verify the basics work. The following test pairs are almost identical, but they return a result in two different ways:
+
+1. as a value without changing state
+2. as a state update returning `()`
+
+
+``` fsharp
+        test "returns value" {
+            let c = state {
+                let! (s : string) = State.getState
+                return System.String(s.ToCharArray() |> Array.rev)
+            }
+            let actual = State.eval c "Hello"
+            Expect.equal actual "olleH" "Expected \"olleH\" as the value."
+        }
+
+        test "returns without changing state" {
+            let c = state {
+                let! (s : string) = State.getState
+                return System.String(s.ToCharArray() |> Array.rev)
+            }
+            let actual = State.exec c "Hello"
+            Expect.equal actual "Hello" "Expected \"Hello\" as the state."
+        }
+
+        test "returns unit" {
+            let c = state {
+                let! (s : string) = State.getState
+                let s' = System.String(s.ToCharArray() |> Array.rev)
+                do! State.setState s'
+            }
+            let actual = State.eval c "Hello"
+            Expect.equal actual () "Expected return value of unit."
+        }
+
+        test "returns changed state" {
+            let c = state {
+                let! (s : string) = State.getState
+                let s' = System.String(s.ToCharArray() |> Array.rev)
+                do! State.setState s'
+            }
+            let actual = State.exec c "Hello"
+            Expect.equal actual "olleH" "Expected state of \"elloH\"."
+        }
+```
+
+Run `dotnet test`, and your tests should pass.
+
+## Handle `if ... then` without an `else`
+
+``` fsharp
+        test "state supports if ... then with no else" {
+            let c : State<unit, string> = state {
+                if true then
+                    printfn "Hello"
+            }
+            let actual = State.eval c ""
+            Expect.equal actual () "Expected the value to be ()."
+        }
+```
+
+The compiler should complain that the `StateBuilder` is missing the `Zero` method:
+
+```
+/Users/ryan/Code/computation-expressions-workshop/solutions/StateBuilder.fs(100,17): error FS0708: This control construct may only be used if the computation expression builder defines a 'Zero' method
+```
+
+Let's add it:
+
+``` fsharp
+    member __.Zero() = State.result ()
+```
+
+With this in place, we can run this test successfully with `dotnet test`. Running with F# Interactive, however, reveals an issue:
+
+```
+>             let c : State<unit, string> = state {
+-                 if true then
+-                     printfn "Hello"
+-             };;
+Hello
+val c : State<unit,string>
+```
+
+Why is `Hello` printed above just by creating the `State` value? Shouldn't that only happen when we run the computation? We need to implement `Delay` to delay execution until we are ready. Here's an implementation like we had before:
+
+``` fsharp
+    member __.Delay(f) = f
+    member __.Run(f) = f()
+```
+
+This satisfies the compiler (if you include `Run`) but does not resolve the issue, as `Hello` is still printed. What about the previous attempt of calling the `f` that was passed immediately?
+
+``` fsharp
+    member __.Delay(f) = f()
+```
+
+Unfortunately, this also satisfies the compiler but fails to actually delay the computation. We need something a bit stronger:
+
+``` fsharp
+    member __.Delay(f) = State.bind f (State.result ())
+```
+
+This at last prevents the computation from running before we are ready:
+
+```
+>             let c : State<unit, string> = state {
+-                 if true then
+-                     printfn "Hello"
+-             };;
+val c : State<unit,string>
+```
+
+Our tests also continue to pass when running `dotnet test`.
+
+## Returning Multiple Values
+
+Add the following test and observe the compiler error:
+
+``` fsharp
+        test "state supports returning multiple values" {
+            let c : State<string, string> = state {
+                return "one"
+                return "two"
+            }
+            let actual = State.eval c ""
+            Expect.equal actual "onetwo" "Expected all returns to be concatenated."
+        }
+```
+
+```
+/Users/ryan/Code/computation-expressions-workshop/solutions/StateBuilder.fs(193,17): error FS0708: This control construct may only be used if the computation expression builder defines a 'Combine' method
+```
+
+Returning multiple values requires `Combine`, so let's implement it ... but how? Here, we once again land in difficult territory. This is a reasonable implementation:
+
+``` fsharp
+    member __.Combine(m1, m2) =
+        // Carry state from m1 through to m2 while ignoring the value from m1.
+        State.bind (fun () -> m2) m1
+```
+
+Here's another:
+
+``` fsharp
+    member inline __.Combine(m1:State<'a, 's>, m2:State<'a, 's>) =
+        fun s ->
+            let v1, s1 = m1 s
+            let v2, s2 = m2 s
+            v1 + v2, s1 + s2
+```
+
+For our test above, the second option works, whereas the first option fails, as it requires that the first `return` returns a `()`.
+
+> **Observation:** you can implement **both** member definitions side-by-side within the same builder without a problem. Since CE builders are just classes, you can implement overload methods for different types of value and state as appropriate, which can give you great freedom to cover a multitude of types.
+
+## Review
+
+We've implemented another builder with the following members:
+* `Return`
+* `ReturnFrom`
+* `Bind`
+* `Zero`
+* `Delay`
+* `Combine`
+
+We did not implement `Run` because it doesn't help us in this case. However, we _did_ implement a module of functions to define the functionality we used in the `StateBuilder` and that help us run the computation produced by the `state` expression, including:
+* `eval`
+* `exec`
+* `getState`
+* `setState`
+
+Finally, we saw an even clearer example of how builder implementations may require member overloads in order to correctly cover different types of expressions.
+
+In the next exercise, we will take returning multiple values to the next level.

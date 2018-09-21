@@ -58,7 +58,7 @@ Now that you have the basics, you can get started by creating a new project with
 6. `if ... then` without an `else`
 7. Exercise: `ChoiceBuilder`, e.g. `choice { return! None; return 1 }`
 
-### Continuation Passing Style (45 minutes)
+### Computation Expressions for Computations (45 minutes)
 
 1. Without a computation expression
 2. Side effects passed into a computation

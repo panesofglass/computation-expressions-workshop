@@ -1,25 +1,30 @@
-module MultipleReturns
+module Sequences
 
-open System.Text
 open Expecto
 
-type Trace<'T> = Trace of 'T * string list
+type Stack<'a> =
+    | Empty
+    | Cons of head:'a * tail:Stack<'a>
 
-type TraceBuilder() =
-    member __.Yield(value) = Trace(value, [])
-    (*
-    member __.Bind(Trace(v, sb), f) =
-        let (Trace(newVal, sb')) = f v
-        Trace(newVal, sb @ [string v] @ sb')
-    *)
-    member __.Combine(Trace(v, sb), f: unit -> Trace<_>) =
-        // TODO: how might we make this tail recursive?
-        let (Trace(newVal, sb')) = f()
-        Trace(newVal, sb @ [string v] @ sb')
-    member __.Delay(f) = f
-    member __.Run(f) = f()
+module Stack =
+    let push v s = Cons(v, s)
+    let pop s =
+        match s with
+        | Cons(v, c) -> v, c
+        | _ -> failwith "Nothing to pop!"
+    let lift v = push v Empty
+    let toList s =
+        let rec loop s cont =
+            match s with
+            | Cons(head, tail) ->
+                loop tail (fun rest -> head::rest)
+            | Empty -> cont []
+        loop s id
 
-let trace = TraceBuilder()
+type StackBuilder() =
+    member __.Yield(value) = Stack.lift value
+
+let stack = StackBuilder()
 
 [<Tests>]
 let tests =

@@ -266,7 +266,7 @@ let tests =
                 printfn "returning first value?"
                 return 2
             }
-            Expect.equal actual (Some 1) "Expected the first value to be returned."
+            Expect.equal actual (Some 3) "Expected the first value to be returned."
         }
 
     ]

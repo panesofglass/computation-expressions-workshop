@@ -39,16 +39,21 @@ let tests =
 
 We've defined four functions, each taking a `StringBuilder` and returning a `StringBuilder`, or in the case of `run`, a `string`. This allows us to nicely chain these functions together and then produce a result at the end. Your primary **observation** here should be that there's a pattern of passing a specific instance and getting it back in the result.
 
+This pattern is often called a [_Fluent Interface_](https://www.martinfowler.com/bliki/FluentInterface.html) in C# designs. In F#, the use of a pipeline typically indicates getting one thing and returning a new, modified instance of the same type, whereas the above sample nafariously hides state mutation with the same pattern. (See [Fluent Interfaces are Evil](https://www.martinfowler.com/bliki/FluentInterface.html) for a relevant discussion.)
+
 However, this is overly simplified, as we may not _always_ want to `Append` to the `StringBuilder`, and we may want to compute a value, which may require retrieving the current value from the `StringBuilder`. With this in mind, we can define our type as:
 
 ``` fsharp
+/// State is a function type that takes a state and
+/// returns a value and the new state.
 type State<'a, 's> = 's -> 'a * 's
 ```
 
 or
 
 ``` fsharp
-type State<'a, 's> = State('s -> 'a * 's)
+/// Single case union of the same type.
+type State<'a, 's> = State of ('s -> 'a * 's)
 ```
 
 depending on whether you prefer the single-case union style. The latter makes the type much more explicit, but it may also prevent you from using existing functions without first wrapping and unwrapping them. For this exercise, we'll use the first version as a means of demonstrating that approach.
@@ -310,6 +315,8 @@ We did not implement `Run` because it doesn't help us in this case. However, we 
 * `getState`
 * `setState`
 
-Finally, we saw an even clearer example of how builder implementations may require member overloads in order to correctly cover different types of expressions.
+We observed an even clearer example of how builder implementations may require member overloads in order to correctly cover different types of expressions.
+
+Lastly, we have an example of how to resolve a common F# design question, "Where do I put this common state parameter?" If you have a set of functions that work together, and you are trying to determine whether to put the state instance as the first parameter -- so you can partially apply it -- or as the last -- so you can pipe it -- to the several, related functions, you may just want a CE that allows you to define the computation and then feed the state at the end.
 
 In the next exercise, we will take returning multiple values to the next level.

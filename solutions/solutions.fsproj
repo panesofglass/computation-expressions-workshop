@@ -21,6 +21,7 @@
     <Compile Include="ChoiceBuilder.fs" />
     <Compile Include="StateBuilder.fs" />
     <Compile Include="Sequences.fs" />
+    <Compile Include="ExceptionsLoopsDisposal.fs" />
     <Compile Include="fizzbuzz.fs" />
     <Compile Include="probs.fs" />
     <Compile Include="Program.fs" />

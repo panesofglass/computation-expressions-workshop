@@ -39,6 +39,27 @@ type Microsoft.FSharp.Control.AsyncBuilder with
             let! [|x';y'|] = Async.Parallel [|x;y|]
             return resultSelector x' y'
         }
+    (*
+    [<CustomOperation("and!", IsLikeZip=true)>]
+    member __.Merge(x, y, [<ProjectionParameter>] resultSelector) =
+        async {
+            let! x' = Async.StartChild x
+            let! y' = Async.StartChild y
+            let! x'' = x'
+            let! y'' = y'
+            return resultSelector x'' y''
+        }
+    *)
+    (*
+    [<CustomOperation("and!", IsLikeZip=true)>]
+    member __.Merge(x, y, [<ProjectionParameter>] resultSelector) =
+        async {
+            let x' = Async.StartAsTask x
+            let y' = Async.StartAsTask y
+            do System.Threading.Tasks.Task.WaitAll(x',y')
+            return resultSelector x'.Result y'.Result
+        }
+    *)
     member this.For(m, f) = this.Bind(m, f)
 
 [<Tests>]

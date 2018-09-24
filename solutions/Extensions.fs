@@ -22,6 +22,25 @@ type OptionBuilder with
     member this.Bind(value, f) =
         this.Bind(Option.ofObj value, f)
 
+let example =
+    async {
+        match! Async.Parallel [|async.Return(1); async.Return(2); async.Return(3)|] with
+        | [|first; second; third|] ->
+            return first + second + third
+        | _ ->
+            failwith "Impossible scenario"
+            return -1
+    }
+
+type Microsoft.FSharp.Control.AsyncBuilder with
+    [<CustomOperation("and!", IsLikeZip = true)>]
+    member this.Merge(x, y, [<ProjectionParameter>] resultSelector) =
+        async {
+            let! [|x';y'|] = Async.Parallel [|x;y|]
+            return resultSelector x' y'
+        }
+    member this.For(m, f) = this.Bind(m, f)
+
 [<Tests>]
 let tests =
     testList "extensions" [
@@ -68,5 +87,59 @@ let tests =
                     return x
                 }
             Expect.equal actual None "Expected a null object to return None"
+        }
+
+        test "concurrent async execution" {
+            let expected = 3
+            let parallel =
+                async {
+                    for a in async.Return(1) do
+                    ``and!`` b in async.Return(2)
+                    return a + b
+                }
+            let actual = Async.RunSynchronously parallel
+            Expect.equal actual expected "Expected actual to equal 3"
+        }
+
+        test "concurrent runs concurrently, not sequentially" {
+            let task1 =
+                async {
+                    do! Async.Sleep(1000)
+                    return 1
+                }
+            let task2 =
+                async {
+                    do! Async.Sleep(1000)
+                    return 2
+                }
+            let sequentialStopwatch = System.Diagnostics.Stopwatch()
+            let sequential =
+                async {
+                    sequentialStopwatch.Start()
+                    let! a = task1
+                    let! b = task2
+                    sequentialStopwatch.Stop()
+                    return a + b
+                }
+                |> Async.RunSynchronously
+            let parallelStopwatch = System.Diagnostics.Stopwatch()
+            let parallel =
+                async {
+                    parallelStopwatch.Start()
+                    for a in task1 do
+                    ``and!`` b in task2
+                    parallelStopwatch.Stop()
+                    return a + b
+                }
+                |> Async.RunSynchronously
+            printfn "Sequential: %d, Concurrent: %d"
+                sequentialStopwatch.ElapsedMilliseconds
+                parallelStopwatch.ElapsedMilliseconds
+            Expect.equal parallel sequential
+                "Expected parallel result to equal sequential result"
+            Expect.isLessThan
+                parallelStopwatch.ElapsedMilliseconds
+                sequentialStopwatch.ElapsedMilliseconds
+                "Expected parallel to be less than sequential"
         }
     ]

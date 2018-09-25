@@ -245,6 +245,241 @@ type Microsoft.FSharp.Linq.QueryBuilder with
 
 The [FSharp.Control.Reactive](https://fsprojects.github.io/FSharp.Control.Reactive) project provides modules and builders that make working with the Reactive Extensions for .NET better fit F# idioms. In the next exercise, we'll re-implement a simple Rx query builder to better understand the `CustomOperationAttribute` and what each of its parameters can enable.
 
+At a minimum, we'll need to implement `For`, `Yield`, and `Zero`, as we saw when looking at the `QueryBuilder`. These are required for iterating over the input data source, yielding results, and allowing for an empty return value:
+
+``` fsharp
+type RxQueryBuilder() =
+    member __.For (s:IObservable<_>, body : _ -> IObservable<_>) = s.SelectMany(body)
+    member __.Yield (value) = Observable.Return(value)
+    member __.Zero () = Observable.Empty(Scheduler.CurrentThread :> IScheduler)
+
+let rxquery = RxQueryBuilder()
+```
+
+> **NOTE:** this query expression uses Rx's `Observable` type for its implementation and follows the LINQ syntax for determining which methods to use. For example, `SelectMany` is the common implementation member for combining two `from ...` expressions in a LINQ query, so it's used here. This means that the first observable must be exhausted before the second would be used. Another valid implementation might be to use the `Observable.Merge` member. The difference is that where `SelectMany` waits for the first observable to complete, `Merge` combines the combined observables as they produce values. This may be a better implementation for your use case.
+
+### `Select`
+
+While `yield` will allow us to return a value, the more common idiom in query expressions is `select`:
+
+``` fsharp
+        test "rxquery can select values from a source" {
+            let expected = [|1..10|]
+            let actual = Array.zeroCreate<int> 10
+            let source = Observable.Range(1, 10)
+            use disp =
+                rxquery {
+                    for x in source do
+                    select x
+                }
+                |> Observable.subscribe (fun i -> actual.[i - 1] <- i)
+            Expect.equal actual expected "Expected observable to populate empty array with selected values"
+        }
+```
+
+We can support this syntax with a `CustomOperation`. We'll use the Rx `Select` extension method for `IObservable<_>`. This method takes a `selector` function, so we'll need to pass that in somehow:
+
+``` fsharp
+type RxQueryBuilder with
+    [<CustomOperation("select")>]
+    member __.Select(s:IObservable<_>, selector: _ -> _) =
+        s.Select(selector)
+```
+
+This _almost_ works. However, the compiler complains that, "The value or constructor 'x' is not defined." We can make a simple change to the test to get this to compile and run:
+
+``` fsharp
+        test "rxquery can select values from a source" {
+            let expected = [|1..10|]
+            let actual = Array.zeroCreate<int> 10
+            let source = Observable.Range(1, 10)
+            use disp =
+                rxquery {
+                    for x in source do
+                    select (fun x -> x) // or the `id` function
+                }
+                |> Observable.subscribe (fun i -> actual.[i - 1] <- i)
+            Expect.equal actual expected "Expected observable to populate empty array with selected values"
+        }
+```
+
+That's not quite what we wanted, but it will work. However, we can do better. Remember the `ProjectionParameter` attribute from the `Extensions` exercise? **The `ProjectionParameter` attribute allows us to pick up the variable or value from earlier in the expression and use it.**
+
+``` fsharp
+type RxQueryBuilder with
+    [<CustomOperation("select")>]
+    member __.Select(s:IObservable<_>, [<ProjectionParameter>] selector: _ -> _) =
+        s.Select(selector)
+```
+
+After this change, the test `rxquery` is okay, but it still ignores the `x` in the `for` and complains in the `Expect` expression that the return type is an `obj`. We can now remove the lambda and simply reference the `x` value as before. Running `dotnet test` should succeed.
+
+### `Head` and `exactlyOne`
+
+While on the subject of returning values, we should implement operators that return a single value from the expression, such as `head` and `exactlyOne`. These correlate to the LINQ extension methods `First` and `Single`, respectively.
+
+``` fsharp
+type RxQueryBuilder with
+    [<CustomOperation("head")>]
+    member __.Head (s:IObservable<_>) = s.FirstAsync()
+    [<CustomOperation("exactlyOne")>]
+    member __.ExactlyOne (s:IObservable<_>) = s.SingleAsync()
+```
+
+The relevant Rx extension methods do not require any parameters, so these are quite easy to implement, assuming you know what methods to call.
+
+We can add tests for these, as well:
+
+``` fsharp
+        test "rxquery can return the first value from a source" {
+            let mutable actual : int = -1
+            let source = Observable.Range(1, 10)
+            use disp =
+                rxquery {
+                    for x in source do
+                    head
+                }
+                |> Observable.subscribe (fun i -> actual <- i)
+            Expect.equal actual 1 "Expected head to return 1"
+        }
+
+        test "rxquery can return the single value from a source of one element" {
+            let mutable actual : int = -1
+            let source = Observable.Return(1)
+            use disp =
+                rxquery {
+                    for x in source do
+                    head
+                }
+                |> Observable.subscribe (fun i -> actual <- i)
+            Expect.equal actual 1 "Expected exactlyOne to return 1"
+        }
+```
+
+You should now be able to implement operators such as `count`, `max`, `min`, and more using the same approach.
+
+### `Where`
+
+Another common operation is to filter data. We can expose this with `where`:
+
+``` fsharp
+        test "rxquery can filter an observable with where" {
+            let expected = [|1..5|]
+            let actual = Array.zeroCreate<int> 5
+            let source = Observable.Range(1, 10)
+            use disp =
+                rxquery {
+                    for x in source do
+                    where (x <= 5)
+                    select x
+                }
+                |> Observable.subscribe (fun i -> actual.[i - 1] <- i)
+            Expect.equal actual expected "Expected exactlyOne to return 1"
+        }
+```
+
+The related Rx extension method is also `Where` which takes a `predicate` function. We know how to handle projecting the variable from our implementation of `Select`:
+
+``` fsharp
+type RxQueryBuilder with
+    [<CustomOperation("where")>]
+    member __.Where(s:IObservable<_>, [<ProjectionParameter>] predicate: _ -> bool) =
+        s.Where(predicate)
+```
+
+Unfortunately, the compiler doesn't think this is enough.
+
+```
+/Users/ryan/Code/ceworkshop/solutions/Queries.fs(195,21): error FS0001: This expression was expected to have type    'int'    but here has type    'unit'
+```
+
+In order for `where` to work successfully, we need to tell inform the compiler that this operation will not change the return type. **The `MaintainsVariableSpace` parameter in the `CustomOperation` attribute will inform the compiler the operation is a chained operation with the same type as the input.**
+
+``` fsharp
+type RxQueryBuilder with
+    [<CustomOperation("where", MaintainsVariableSpace=true)>]
+    member __.Where(s:IObservable<_>, [<ProjectionParameter>] predicate: _ -> bool) =
+        s.Where(predicate)
+```
+
+The compiler is once again happy, and `dotnet test` should run your tests successfully. Additional operators that use this approach include `Skip`, `Take`, `Sort` (though you may want to avoid this with `IObsevable`s), etc.
+
+### `GroupBy`
+
+The next operator we should investigate is `groupBy`. Unlike `where`, `groupBy` transforms the result type. Unlike `select`, `groupBy` doesn't return a result set. Instead, its result is assigned to a new value:
+
+``` fsharp
+        test "rxquery can group an observable" {
+            let expected = [|"a";"b"|]
+            let actual = ResizeArray<string>()
+            let source =
+                Observable.Generate(1,
+                    (fun x -> x < 10),
+                    (fun x -> x + 1),
+                    (fun x ->
+                        if x < 2 then "a", x
+                        else "b", x))
+            use disp =
+                rxquery {
+                    for (k, _) in source do
+                    groupBy k into g
+                    select g.Key
+                }
+                |> Observable.subscribe actual.Add
+            Expect.equal (actual.ToArray()) expected "Expected where to filter input"
+        }
+```
+
+Rx again provides the extension method required to implement this behavior, and we once again allow use of the value assigned in the `for` with the `ProjectionParameter`:
+
+``` fsharp
+type RxQueryBuilder with
+    [<CustomOperation("groupBy")>]
+    member __.GroupBy (s:IObservable<_>,[<ProjectionParameter>] keySelector : _ -> _) =
+        s.GroupBy(new Func<_,_>(keySelector))
+```
+
+The compiler helpfully informs us, `The operator 'groupBy' does not accept the use of 'into'`. This matches another parameter of the `CustomOperation` attribute. **The `AllowIntoPattern` parameter allows an operator to transform the source input into a new type by specifying a new value with `into`.**
+
+### `Join`
+
+Joins are used to find the intersection of two data sets based on a `predicate` that links the two data sets to gether. The results of joins may be grouped using `into` like `groupBy`. However, joins are special enough to require their own parameter. **The `IsLikeJoin` parameter in the `CustomOperation` attribute provides all the context necessary for the compiler to understand how to process a join. You also need to specify the `JoinConditionWord`, e.g. "on".**
+
+``` fsharp
+type RxQueryBuilder with
+    [<CustomOperation("join", IsLikeJoin=true, JoinConditionWord="on")>]
+    member __.Join (s1:IObservable<_>, s2:IObservable<_>,
+        [<ProjectionParameter>] s1KeySelector : _ -> _,
+        [<ProjectionParameter>] s2KeySelector : _ -> _,
+        [<ProjectionParameter>] resultSelector : _ -> _) =
+        s1.Join(s2,
+            new Func<_,_>(s1KeySelector),
+            new Func<_,_>(s2KeySelector),
+            new Func<_,_,_>(resultSelector))
+```
+
+The `Join` method takes two observables, a key selector function for each observable, and finally the projected result selector, or the rest of the query expression. Whereas the types of the observables may be different, the types of the key selectors should match, as they will be equated.
+
+``` fsharp
+        test "rxquery can join two observables" {
+            let expected = [|3;4;5|]
+            let actual = ResizeArray<int>()
+            let source1 = Observable.Range(1, 5)
+            let source2 = Observable.Range(3, 5)
+            use disp =
+                rxquery {
+                    for x in source1 do
+                    join y in source2 on (x = y)
+                    select x
+                }
+                |> Observable.subscribe actual.Add
+            Expect.equal (actual.ToArray()) expected "Expected join to produce [|3;4;5|]"
+        }
+```
+
+### `Zip` and `ForkJoin`
+
+
 ## Understanding Restrictions
 
 There are a handful of rules about `CustomOperation`s that are not well defined except by error messages. You can find those restrictions in the [`FSComp.txt`](https://github.com/Microsoft/visualfsharp/blob/81894434220bb19e2985946afd15fbe4d91df9b4/src/fsharp/FSComp.txt#L1197-L1215) file in the [visualfsharp](https://github.com/Microsoft/visualfsharp) repository (or by trying and failing to build).

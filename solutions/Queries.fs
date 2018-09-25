@@ -5,7 +5,6 @@ open System.Linq
 open System.Reactive.Linq
 open System.Reactive.Concurrency
 open Microsoft.FSharp.Linq
-open Sequences
 open Expecto
 
 type TestRec = { Value : int }
@@ -23,30 +22,39 @@ type Microsoft.FSharp.Linq.QueryBuilder with
             Enumerable.Single(source.Source) |> Some
         else None
 
-/// An Observable computation builder.
-type ObservableBuilder() =
-    member __.Bind(m: IObservable<_>, f: _ -> IObservable<_>) = m.SelectMany(f)
-    member __.Combine(comp1, comp2) = Observable.Concat(comp1, comp2)
-    member __.Delay(f: _ -> IObservable<_>) = Observable.Defer(fun _ -> f())
-    member __.Zero() = Observable.Empty(Scheduler.CurrentThread :> IScheduler)
-    member __.For(sequence, body) = Observable.For(sequence, Func<_,_> body)
-    member __.TryWith(m: IObservable<_>, h: #exn -> IObservable<_>) = Observable.Catch(m, h)
-    member __.TryFinally(m, compensation) = Observable.Finally(m, Action compensation)
-    member __.Using(res: #IDisposable, body) = Observable.Using((fun () -> res), Func<_,_> body)
-    member __.While(guard, m: IObservable<_>) = Observable.While(Func<_> guard, m)
-    member __.Yield(x) = Observable.Return(x, Scheduler.CurrentThread)
-    member __.YieldFrom m : IObservable<_> = m
-
-let observe = ObservableBuilder()
-
-/// A reactive query builder.
-/// See http://mnajder.blogspot.com/2011/09/when-reactive-framework-meets-f-30.html
 type RxQueryBuilder() =
     member __.For (s:IObservable<_>, body : _ -> IObservable<_>) = s.SelectMany(body)
-    [<CustomOperation("select", AllowIntoPattern=true)>]
-    member __.Select (s:IObservable<_>, [<ProjectionParameter>] selector : _ -> _) = s.Select(selector)
-    [<CustomOperation("where", MaintainsVariableSpace=true, AllowIntoPattern=true)>]
-    member __.Where (s:IObservable<_>, [<ProjectionParameter>] predicate : _ -> bool ) = s.Where(predicate)
+    member __.Yield (value) = Observable.Return(value)
+    member __.Zero () = Observable.Empty(Scheduler.CurrentThread :> IScheduler)
+
+    [<CustomOperation("select")>]
+    member __.Select(s:IObservable<_>, [<ProjectionParameter>] selector: _ -> _) =
+        s.Select(selector)
+
+    [<CustomOperation("head")>]
+    member __.Head (s:IObservable<_>) = s.FirstAsync()
+    [<CustomOperation("exactlyOne")>]
+    member __.ExactlyOne (s:IObservable<_>) = s.SingleAsync()
+
+    [<CustomOperation("where", MaintainsVariableSpace=true)>]
+    member __.Where (s:IObservable<_>, [<ProjectionParameter>] predicate : _ -> bool) =
+        s.Where(predicate)
+
+    [<CustomOperation("groupBy", AllowIntoPattern=true)>]
+    member __.GroupBy (s:IObservable<_>,[<ProjectionParameter>] keySelector : _ -> _) =
+        s.GroupBy(new Func<_,_>(keySelector))
+
+    [<CustomOperation("join", IsLikeJoin=true, JoinConditionWord="on")>]
+    member __.Join (s1:IObservable<_>, s2:IObservable<_>,
+        [<ProjectionParameter>] s1KeySelector : _ -> _,
+        [<ProjectionParameter>] s2KeySelector : _ -> _,
+        [<ProjectionParameter>] resultSelector : _ -> _) =
+        s1.Join(s2,
+            new Func<_,_>(s1KeySelector),
+            new Func<_,_>(s2KeySelector),
+            new Func<_,_,_>(resultSelector))
+
+(*
     [<CustomOperation("takeWhile", MaintainsVariableSpace=true, AllowIntoPattern=true)>]
     member __.TakeWhile (s:IObservable<_>, [<ProjectionParameter>] predicate : _ -> bool ) = s.TakeWhile(predicate)
     [<CustomOperation("take", MaintainsVariableSpace=true, AllowIntoPattern=true)>]
@@ -55,8 +63,6 @@ type RxQueryBuilder() =
     member __.SkipWhile (s:IObservable<_>, [<ProjectionParameter>] predicate : _ -> bool ) = s.SkipWhile(predicate)
     [<CustomOperation("skip", MaintainsVariableSpace=true, AllowIntoPattern=true)>]
     member __.Skip (s:IObservable<_>, count: int) = s.Skip(count)
-    member __.Zero () = Observable.Empty(Scheduler.CurrentThread :> IScheduler)
-    member __.Yield (value) = Observable.Return(value)
     [<CustomOperation("count")>]
     member __.Count (s:IObservable<_>) = Observable.Count(s)
     [<CustomOperation("all")>]
@@ -101,6 +107,7 @@ type RxQueryBuilder() =
     //member __.ForkJoin (s1:IObservable<_>,s2:IObservable<_>,[<ProjectionParameter>] resultSelector : _ -> _) = s1.ForkJoin(s2,new Func<_,_,_>(resultSelector))
     [<CustomOperation("iter")>]
     member __.Iter(s:IObservable<_>, [<ProjectionParameter>] selector : _ -> _) = s.Do(selector)
+*)
 
 let rxquery = RxQueryBuilder()
 
@@ -153,5 +160,91 @@ let tests =
                     exactlyOneOrNone
                 }
             Expect.equal actual None "Expected None"
+        }
+
+        test "rxquery can select values from a source" {
+            let expected = [|1..10|]
+            let actual = Array.zeroCreate<int> 10
+            let source = Observable.Range(1, 10)
+            use disp =
+                rxquery {
+                    for x in source do
+                    select x
+                }
+                |> Observable.subscribe (fun i -> actual.[i - 1] <- i)
+            Expect.equal actual expected "Expected observable to populate empty array with selected values"
+        }
+
+        test "rxquery can return the first value from a source" {
+            let mutable actual : int = -1
+            let source = Observable.Range(1, 10)
+            use disp =
+                rxquery {
+                    for x in source do
+                    head
+                }
+                |> Observable.subscribe (fun i -> actual <- i)
+            Expect.equal actual 1 "Expected head to return 1"
+        }
+
+        test "rxquery can return the single value from a source of one element" {
+            let mutable actual : int = -1
+            let source = Observable.Return(1)
+            use disp =
+                rxquery {
+                    for x in source do
+                    head
+                }
+                |> Observable.subscribe (fun i -> actual <- i)
+            Expect.equal actual 1 "Expected exactlyOne to return 1"
+        }
+
+        test "rxquery can filter an observable with where" {
+            let expected = [|1..5|]
+            let actual = Array.zeroCreate<int> 5
+            let source = Observable.Range(1, 10)
+            use disp =
+                rxquery {
+                    for x in source do
+                    where (x <= 5)
+                    select x
+                }
+                |> Observable.subscribe (fun i -> actual.[i - 1] <- i)
+            Expect.equal actual expected "Expected where to filter input"
+        }
+
+        test "rxquery can group an observable" {
+            let expected = [|"a";"b"|]
+            let actual = ResizeArray<string>()
+            let source =
+                Observable.Generate(1,
+                    (fun x -> x < 10),
+                    (fun x -> x + 1),
+                    (fun x ->
+                        if x < 2 then "a", x
+                        else "b", x))
+            use disp =
+                rxquery {
+                    for (k, _) in source do
+                    groupBy k into g
+                    select g.Key
+                }
+                |> Observable.subscribe actual.Add
+            Expect.equal (actual.ToArray()) expected "Expected where to filter input"
+        }
+
+        test "rxquery can join two observables" {
+            let expected = [|3;4;5|]
+            let actual = ResizeArray<int>()
+            let source1 = Observable.Range(1, 5)
+            let source2 = Observable.Range(3, 5)
+            use disp =
+                rxquery {
+                    for x in source1 do
+                    join y in source2 on (x = y)
+                    select x
+                }
+                |> Observable.subscribe actual.Add
+            Expect.equal (actual.ToArray()) expected "Expected join to produce [|3;4;5|]"
         }
     ]

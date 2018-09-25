@@ -31,90 +31,55 @@ Now that you have the basics, you can get started by creating a new project with
 
 # Outline
 
-## Computation Expressions
+## Introduction
 
-### Introduction (15 minutes)
+### What?
 
-#### What?
+1. Computation Expressions
+2. Query Expressions
 
-1. [Language Reference](https://docs.microsoft.com/en-us/dotnet/fsharp/language-reference/computation-expressions)
-2. [Embedded DSL](http://www.readcopyupdate.com/blog/2014/10/10/edsls-using-custom-operations.html)
-
-#### Why?
+### Why?
 
 1. Reduce arrowhead pattern
 2. Familiar syntax, e.g. `let` and `do` with extensions: `let!`, `do!`, `return`, etc.
-3. `async`
-4. `seq`
-5. `test` (from Expecto) & `BuildTask`
+3. Language integrated queries (LINQ), e.g. `query { for x in source do select x }`
+4. Language extensions without macros
 
-### `OptionBuilder` (45 minutes)
+## Exercises
 
-1. Without a computation expression
-2. `Return`
-3. `Bind`
-4. Side effects and `Delay`
-5. `do!` with a `unit` result using `Combine`
-6. `if ... then` without an `else`
-7. Exercise: `ChoiceBuilder`, e.g. `choice { return! None; return 1 }`
+1. Computation Expressions: `OptionBuilder`
+    1. Without a computation expression
+    2. `Return`
+    3. `Bind`
+    4. Side effects and `Delay`
+    5. `Run`ning a delayed computation
+    6. `do!` with a `unit` result using `Combine`
+    7. `if ... then` without an `else`
+2. Combining Results: `ChoiceBuilder`
+3. CEs for Compuations: `StateBuilder`
+    1. Without a computation expression
+    2. Side effects passed into a computation
+    3. Differences between "container" and "computation"
+4. Sequences: `StackBuilder`
+    1. `Yield` = `Return`
+    2. `For` = `Bind`
+    3. Differences in `Delay`
+5. Error Handling, Disposal, and More
+    1. `TryWith`
+    2. `TryFinally`
+    3. `Using`
+    4. `While`
+    5. `Quote`
+6. Extending Computation Expressions
+    1. Method Overloads
+    2. Adding Custom Extensions
+7. Query Expressions
+8. Embedded DSLs
+    1. NuGet
+    2. IL
+    3.  Saturn
+    4.  Freya
 
-### Computation Expressions for Computations (45 minutes)
+## Project
 
-1. Without a computation expression
-2. Side effects passed into a computation
-3. Differences between "container" and "computation"
-4. Exercise: `StateBuilder`
-
-### Generating Sequences (45 minutes)
-
-1. `Yield` = `Return`
-2. `For` = `Bind`
-3. Exercise: `EventBuilder`
-
-### Error Handling, Disposal, and More (30 minutes)
-
-1. `TryWith`
-2. `TryFinally`
-3. `Using`
-4. `While`
-5. `Quote`
-
-## Extending Computation Expressions
-
-### Method Overloads (30 minutes)
-
-1. `AsyncBuilder.Bind` for `Task<'T>`
-2. `AsyncBuilder.Bind` for `Task`
-
-### Adding Custom Extensions (30 minutes)
-
-1. Brief introduction to `CustomOperationAttribute`
-2. Emulating applicatives with `for ... and! ...`
-3. Overloading `CustomOperation` parameters
-    1. Short answer: not allowed
-    2. Long answer: use SRTP
-4. Exercise: overload applicative for `Async<'T>` and `Task<'T>`
-
-## Lunch
-
-## Query Expressions (1 hour)
-
-1. `query`
-2. [`cil`](https://github.com/rspeele/LicenseToCIL)
-3. Exercise: are you smarter than a FizzBuzz? (`FizzBuzzChecker`)
-
-## Embedded DSLs (1 hour)
-
-1. NuGet
-2. IL
-3. Saturn
-4. Freya
-
-# Project (2 hours)
-
-Suggestions:
-* Extend existing computation expressions in some way
-* [probs.fsx](https://gist.github.com/mavnn/8ef06cb12ebc9a1807799bc01667e32a)
-* CE using `Expr` to generate code
-* Generate CE from Type Provider
-* DSL for some business process
+## Wrap up

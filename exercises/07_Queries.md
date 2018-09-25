@@ -137,45 +137,119 @@ These `Run` methods allow the `query` expression to support several data sources
 
 ## Extending `QueryBuilder` to support `'a option`
 
-Another observation you may have made is how closely the `QueryBuilder` has stuck to the common LINQ expressions, including the `exactlyOneOrDefault`, `headOrDefault`, etc., all of which assume a value that can have a literal `null` value. F# types do not typically allow this, so you should expect the following test to fail:
+Another observation you may have made is how closely the `QueryBuilder` has stuck to the common LINQ expressions, including the `exactlyOneOrDefault`, `headOrDefault`, etc. However, it's difficult to make sense of a `default` for many F# types. The more common approach for F# is to represent something that may not exist as an `'a option`. The following test will pass, but what is represented by the `actual : TestRec` value?
 
 ``` fsharp
+type TestRec = { Value : int }
 
+[<Tests>]
+let tests =
+    testList "queries" [
+        test "query supports F# types with headOrDefault" {
+            let actual : TestRec =
+                query {
+                    for x in Seq.empty<TestRec> do
+                    headOrDefault
+                }
+            Expect.equal actual (Unchecked.defaultof<TestRec>) "Expected default value of TestRec"
+        }
+    ]
 ```
 
-Let's fix this with some extensions:
+The following test better expresses what we would like from the query:
 
 ``` fsharp
+        test "query supports F# types with headOrNone" {
+            let actual =
+                query {
+                    for x in Seq.empty<TestRec> do
+                    headOrNone
+                }
+            Expect.equal actual None "Expected None"
+        }
+```
+
+The compiler will complain that this operator is not available on the `QueryBuilder`:
 
 ```
+This is not a known query operator. Query operators are identifiers such as 'select', 'where', 'sortBy', 'thenBy', 'groupBy', 'groupValBy', 'join', 'groupJoin', 'sumBy' and 'averageBy', defined using corresponding methods on the 'QueryBuilder' type.
+```
+
+Let's fix this with an extension:
+
+``` fsharp
+open System
+open System.Linq
+open System.Reactive.Linq
+open System.Reactive.Concurrency
+open Microsoft.FSharp.Linq
+open Expecto
+
+type Microsoft.FSharp.Linq.QueryBuilder with
+
+    [<CustomOperation("headOrNone")>] 
+    member __.HeadOrNone(source:QuerySource<'T,'Q>) =
+        Seq.tryHead source.Source
+```
+
+Running `dotnet test` should now succeed. This extension didn't need any of the additonal `CustomOperation` parameters as it works directly on the input data source.
+
+We can do something similar to support `exactlyOneOrNone`:
+
+``` fsharp
+// ... extension:
+type Microsoft.FSharp.Linq.QueryBuilder with
+
+    [<CustomOperation("exactlyOneOrNone")>] 
+    member __.ExactlyOneOrNone(source:QuerySource<'T,'Q>) =
+        if Seq.length source.Source = 1 then
+            Enumerable.Single(source.Source) |> Some
+        else None
+
+// ... tests:
+
+        test "query exactlyOneOrNone returns the single value for a seq with one element" {
+            let source = seq { yield { Value = 1 } }
+            let actual =
+                query {
+                    for x in source do
+                    exactlyOneOrNone
+                }
+            Expect.equal actual (Seq.tryHead source) "Expected { Value = 1 }"
+        }
+
+        test "query exactlyOneOrNone returns None for an empty seq" {
+            let source = Seq.empty<TestRec>
+            let actual =
+                query {
+                    for x in source do
+                    exactlyOneOrNone
+                }
+            Expect.equal actual None "Expected None"
+        }
+
+        test "query exactlyOneOrNone returns None for a seq with more than one element" {
+            let source = seq { yield { Value = 1 }; yield { Value = 2 } }
+            let actual =
+                query {
+                    for x in source do
+                    exactlyOneOrNone
+                }
+            Expect.equal actual None "Expected None"
+        }
+```
+
+`dotnet test` should run successfully for all tests.
 
 ## `CustomOperation`s in `rxquery`
 
-The [FSharp.Control.Reactive](https://fsprojects.github.io/FSharp.Control.Reactive) project provides modules and builders that make working with the Reactive Extensions for .NET better fit F# idioms. 
+The [FSharp.Control.Reactive](https://fsprojects.github.io/FSharp.Control.Reactive) project provides modules and builders that make working with the Reactive Extensions for .NET better fit F# idioms. In the next exercise, we'll re-implement a simple Rx query builder to better understand the `CustomOperationAttribute` and what each of its parameters can enable.
 
 ## Understanding Restrictions
 
 There are a handful of rules about `CustomOperation`s that are not well defined except by error messages. You can find those restrictions in the [`FSComp.txt`](https://github.com/Microsoft/visualfsharp/blob/81894434220bb19e2985946afd15fbe4d91df9b4/src/fsharp/FSComp.txt#L1197-L1215) file in the [visualfsharp](https://github.com/Microsoft/visualfsharp) repository (or by trying and failing to build).
 
-One such restriction states, "The implementations of custom operations may not be overloaded." Another states, "A custom operation may not be used in conjunction with 'use', 'try/with', 'try/finally', 'if/then/else' or 'match' operators within this computation expression." These are fairly standard use cases elsewhere.
-
-You can sometimes get around these restrictions by using nested computations, e.g.
-
-``` fsharp
-let q =
-    query {
-        for x in source do
-        where x < 1
-        select x
-    }
-seq {
-    for x in q do
-        try
-            yield 1 / x
-        with e ->
-            yield x
-}
-```
+One such restriction states, "The implementations of custom operations may not be overloaded." Another states, "A custom operation may not be used in conjunction with 'use', 'try/with', 'try/finally', 'if/then/else' or 'match' operators within this computation expression."
 
 ## Review
 

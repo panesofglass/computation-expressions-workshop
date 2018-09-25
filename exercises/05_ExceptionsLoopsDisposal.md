@@ -402,7 +402,7 @@ Our last member is fairly uncommon, or so I've found. It's documented in the [la
 Let's see what will happen if we add it to our builder:
 
 ``` fsharp
-    member __.Quote(f) = f
+    member __.Quote(q:Quotations.Expr<_>) = q
 ```
 
 If you try to run the build now, you'll see it turn red with errors such as:

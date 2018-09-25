@@ -36,7 +36,7 @@ type MyTestBuilder(name) =
             __.Bind(body, (fun () -> __.While(pred,body)))
         else __.Zero()
     member __.Bind(m:unit -> unit, f) = f(m())
-    //member __.Quote(f) = f
+    //member __.Quote(q:Quotations.Expr<_>) = q
 
 let myTest name = MyTestBuilder(name)
 

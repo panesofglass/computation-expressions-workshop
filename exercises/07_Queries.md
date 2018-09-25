@@ -2,6 +2,34 @@
 
 In this section we will look at [Query Expressions](https://docs.microsoft.com/en-us/dotnet/fsharp/language-reference/query-expressions). Query Expressions were introduced in F# 3.0, alongside [Type Providers](https://docs.microsoft.com/en-us/dotnet/fsharp/tutorials/type-providers/).
 
+From the docs,
+> Query expressions enable you to query a data source and put the data in a desired form. Query expressions provide support for LINQ in F#.
+
+In earlier versions of F#, LINQ queries had to be expressed in the form of quotations, e.g.
+
+``` fsharp
+query <@ for x in source do yield x @>
+```
+
+With query expressions, the same could be expressed in a form more familiar to .NET developers of other languages, e.g.
+
+``` fsharp
+query {
+    for x in source do
+    where x < 1
+    select x
+}
+```
+
+Compare with C#:
+``` csharp
+from x in source
+where x < 1
+select x
+```
+
+Fortunately, query expressions may be created for any data source, just like computation expressions and LINQ providers. Also like these, you are allowed to add as many or as few operators as you want to support or enable within your query.
+
 In this exercise, we'll look at the `QueryBuilder` provided by `FSharp.Core`, implement a few more extensions to support `'a option` results, and explore the range of `CustomOperation`s by implementing several members of the `rxquery` expression for the Reactive Extensions found in [FSharp.Control.Reactive](https://github.com/fsprojects/FSharp.Control.Reactive). 
 
 1. Create a new file, `Queries.fs`.
@@ -20,12 +48,110 @@ let tests =
 
 ## `QueryBuilder`
 
+You can find the implementation of the F# `QueryBuilder` in the [Microsoft/visualfsharp repository on GitHub](https://github.com/Microsoft/visualfsharp/blob/master/src/fsharp/FSharp.Core/Query.fs). Open the link and make the following observations:
+
+1. `QueryBuilder` works against a `QuerySource` type
+2. `For` and `Yield`, as well as `Zero` and `YieldFrom`, form the basic syntax for iterating and returning values
+3. `Quote` is implemented, meaning the results will be transformed into F# quotations
+4. There are a bunch of methods implemented that look like some of the syntax we would expect to see, e.g. `Select`, `Where`, etc.
+5. Toward the bottom of the `QueryBuilder` definition, at line 203, you'll see several methods relating to `Run`, as well as the actual `Run` method
+6. Below the `QueryBuilder` you'll see a `Query` module that processes the `Quotation.Expr<_>` results
+
+You may be wondering whether all these methods like `Select`, `Where`, etc. are all detected by name to support query expressions. Or you may know that these methods have attributes specified in a [Query.fsi signature file](https://github.com/Microsoft/visualfsharp/blob/master/src/fsharp/FSharp.Core/Query.fsi). Open this link, and you'll see the following:
+
+``` fsharp
+        /// <summary>A query operator that determines whether the selected elements contains a specified element.
+        /// </summary>
+        [<CustomOperation("contains")>] 
+        member Contains : source:QuerySource<'T,'Q> * key:'T -> bool
+
+        /// <summary>A query operator that returns the number of selected elements.
+        /// </summary>
+        [<CustomOperation("count")>] 
+        member Count : source:QuerySource<'T,'Q> -> int
+
+        /// <summary>A query operator that selects the last element of those selected so far.
+        /// </summary>
+        [<CustomOperation("last")>] 
+        member Last : source:QuerySource<'T,'Q> -> 'T
+
+        // ...
+
+        /// <summary>A query operator that projects each of the elements selected so far.
+        /// </summary>
+        [<CustomOperation("select",AllowIntoPattern=true)>] 
+        member Select : source:QuerySource<'T,'Q> * [<ProjectionParameter>] projection:('T -> 'Result) -> QuerySource<'Result,'Q>
+
+        /// <summary>A query operator that selects those elements based on a specified predicate. 
+        /// </summary>
+        [<CustomOperation("where",MaintainsVariableSpace=true,AllowIntoPattern=true)>] 
+        member Where : source:QuerySource<'T,'Q> * [<ProjectionParameter>] predicate:('T -> bool) -> QuerySource<'T,'Q>
+
+        // ...
+
+        /// <summary>A query operator that correlates two sets of selected values based on matching keys. 
+        /// Normal usage is 'join y in elements2 on (key1 = key2)'. 
+        /// </summary>
+        [<CustomOperation("join",IsLikeJoin=true,JoinConditionWord="on")>] 
+        member Join : outerSource:QuerySource<'Outer,'Q> * innerSource:QuerySource<'Inner,'Q> * outerKeySelector:('Outer -> 'Key) * innerKeySelector:('Inner -> 'Key) * resultSelector:('Outer -> 'Inner -> 'Result) -> QuerySource<'Result,'Q>
+
+        /// <summary>A query operator that correlates two sets of selected values based on matching keys and groups the results. 
+        /// Normal usage is 'groupJoin y in elements2 on (key1 = key2) into group'. 
+        /// </summary>
+        [<CustomOperation("groupJoin",IsLikeGroupJoin=true,JoinConditionWord="on")>] 
+        member GroupJoin : outerSource:QuerySource<'Outer,'Q> * innerSource:QuerySource<'Inner,'Q> * outerKeySelector:('Outer -> 'Key) * innerKeySelector:('Inner -> 'Key) * resultSelector:('Outer -> seq<'Inner> -> 'Result) -> QuerySource<'Result,'Q>
+
+        // ...
+
+        /// <summary>
+        /// When used in queries, this operator corresponds to the LINQ Zip operator.
+        /// </summary>
+        [<CustomOperation("zip",IsLikeZip=true)>] 
+        member Zip : firstSource:QuerySource<'T1> * secondSource:QuerySource<'T2> * resultSelector:('T1 -> 'T2 -> 'Result) -> QuerySource<'Result>
+
+        // ...
+```
+
+Query expressions are enabled by the `CustomOperationAttribute`. Observe that this query expression uses many variations of the available parameters, though `MaintainsVariableSpaceUsingBind` is missing. Nevertheless, you can learn a lot about the behavior enforced by these parameters based on the methods in this builder.
+
+The use of `Quote` means the builder _should_ also define `Run`. While not required, some form of quotation processor should be provided. In the case of `QueryBuilder`, several `Run` options are provided:
+
+``` fsharp
+        /// <summary>
+        /// A method used to support the F# query syntax.  Indicates that the query should be passed as a quotation to the Run method.
+        /// </summary>
+        member Quote  : Quotations.Expr<'T> -> Quotations.Expr<'T>
+
+        /// <summary>
+        /// A method used to support the F# query syntax.  Runs the given quotation as a query using LINQ IQueryable rules.
+        /// </summary>
+        member Run : Quotations.Expr<QuerySource<'T,IQueryable>> -> IQueryable<'T> 
+        member internal RunQueryAsQueryable : Quotations.Expr<QuerySource<'T,IQueryable>> -> IQueryable<'T> 
+        member internal RunQueryAsEnumerable : Quotations.Expr<QuerySource<'T,IEnumerable>> -> seq<'T> 
+        member internal RunQueryAsValue : Quotations.Expr<'T> -> 'T
+```
+
+These `Run` methods allow the `query` expression to support several data sources at once, including those exposed by Entity Framework and simple `seq<'a>` values.
+
+> **Observation:** the `QueryBuilder` works with `Enumerable` internally, then exposes its contents as `Quotations.Expr<_>`, which are processed by the `Run` methods. While you may not necessarily want to use the `Quote` feature, this highlights an important concept of differntiating the internal type of the computation from the result type.
 
 ## Extending `QueryBuilder` to support `'a option`
 
+Another observation you may have made is how closely the `QueryBuilder` has stuck to the common LINQ expressions, including the `exactlyOneOrDefault`, `headOrDefault`, etc., all of which assume a value that can have a literal `null` value. F# types do not typically allow this, so you should expect the following test to fail:
+
+``` fsharp
+
+```
+
+Let's fix this with some extensions:
+
+``` fsharp
+
+```
 
 ## `CustomOperation`s in `rxquery`
 
+The [FSharp.Control.Reactive](https://fsprojects.github.io/FSharp.Control.Reactive) project provides modules and builders that make working with the Reactive Extensions for .NET better fit F# idioms. 
 
 ## Understanding Restrictions
 

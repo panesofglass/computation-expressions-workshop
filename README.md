@@ -103,12 +103,12 @@ Now that you have the basics, you can get started by creating a new project with
 2. [`cil`](https://github.com/rspeele/LicenseToCIL)
 3. Exercise: are you smarter than a FizzBuzz? (`FizzBuzzChecker`)
 
-## Mixing it up (1 hour)
+## Embedded DSLs (1 hour)
 
-1. `AsyncSeq`
-2. `AsyncState`
-3. `FreyaMachine` and `FreyaRouter`
-4. `Saturn`
+1. NuGet
+2. IL
+3. Saturn
+4. Freya
 
 # Project (2 hours)
 

@@ -2,9 +2,29 @@
 
 In this section we will look at [Query Expressions](https://docs.microsoft.com/en-us/dotnet/fsharp/language-reference/query-expressions). Query Expressions were introduced in F# 3.0, alongside [Type Providers](https://docs.microsoft.com/en-us/dotnet/fsharp/tutorials/type-providers/).
 
+In this exercise, we'll look at the `QueryBuilder` provided by `FSharp.Core`, implement a few more extensions to support `'a option` results, and explore the range of `CustomOperation`s by implementing several members of the `rxquery` expression for the Reactive Extensions found in [FSharp.Control.Reactive](https://github.com/fsprojects/FSharp.Control.Reactive). 
+
+1. Create a new file, `Queries.fs`.
+2. Add the file to your `.fsproj` with `<Compile Include="Queries.fs" />` just below `Extensions.fs`.
+3. Add the following lines to the `Extensions.fs` file:
+``` fsharp
+module Queries
+
+open Expecto
+
+[<Tests>]
+let tests =
+    testList "queries" [
+    ]
+```
+
+## `QueryBuilder`
 
 
+## Extending `QueryBuilder` to support `'a option`
 
+
+## `CustomOperation`s in `rxquery`
 
 
 ## Understanding Restrictions
@@ -33,3 +53,10 @@ seq {
 
 ## Review
 
+This section completes our exploration into the features provided by computation and query expressions. In this section, we reviewed the following:
+
+* `QueryBuilder`
+* Extending Query Expressions
+* `CustomOperation` parameter uses
+
+You have now seen all the tools available for creating useful, reusable abstractions to simplify your programs. However, we can take this even farther by leveraging `CustomOperation`s to embed domain specific languages within F# and provide a even more expressive abstractions for writing simple programs to solve complex problems.

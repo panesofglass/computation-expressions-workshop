@@ -100,3 +100,8 @@ type RxQueryBuilder() =
     member __.Iter(s:IObservable<_>, [<ProjectionParameter>] selector : _ -> _) = s.Do(selector)
 
 let rxquery = RxQueryBuilder()
+
+[<Tests>]
+let tests =
+    testList "queries" [
+    ]

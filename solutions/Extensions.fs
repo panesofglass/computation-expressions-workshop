@@ -62,6 +62,32 @@ type Microsoft.FSharp.Control.AsyncBuilder with
     *)
     member this.For(m, f) = this.Bind(m, f)
 
+// From 08_EDSLs.md
+module Asyncs =
+    [<RequireQualifiedAccess>]
+    module Inference =
+        type Defaults =
+            | Defaults
+            static member Asyncs (x:Async<_>) = x
+            static member Asyncs (x:System.Threading.Tasks.Task<_>) =
+                Async.AwaitTask x
+        let inline defaults (a: ^a, _: ^b) =
+            ((^a or ^b) : (static member Asyncs: ^a -> Async<_>) a)
+        let inline infer (x: ^a) =
+            defaults (x, Defaults)
+        
+    let inline infer v =
+        Inference.infer v
+
+type Microsoft.FSharp.Control.AsyncBuilder with
+    member inline __.Merge(x, y, [<ProjectionParameter>] resultSelector) =
+        async {
+            let x' = Asyncs.infer x |> Async.StartAsTask
+            let y' = Asyncs.infer y |> Async.StartAsTask
+            do System.Threading.Tasks.Task.WaitAll(x',y')
+            return resultSelector x'.Result y'.Result
+        }
+
 [<Tests>]
 let tests =
     testList "extensions" [
@@ -162,5 +188,17 @@ let tests =
                 parallelStopwatch.ElapsedMilliseconds
                 sequentialStopwatch.ElapsedMilliseconds
                 "Expected parallel to be less than sequential"
+        }
+
+        test "concurrent task execution within async" {
+            let expected = 3
+            let parallel =
+                async {
+                    for a in System.Threading.Tasks.Task.FromResult(1) do
+                    ``and!`` b in System.Threading.Tasks.Task.FromResult(2)
+                    return a + b
+                }
+            let actual = Async.RunSynchronously parallel
+            Expect.equal actual expected "Expected actual to equal 3"
         }
     ]

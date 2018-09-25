@@ -25,7 +25,6 @@
     <Compile Include="ExceptionsLoopsDisposal.fs" />
     <Compile Include="Extensions.fs" />
     <Compile Include="Queries.fs" />
-    <Compile Include="EDSLs.fs" />
     <Compile Include="fizzbuzz.fs" />
     <Compile Include="probs.fs" />
     <Compile Include="Program.fs" />

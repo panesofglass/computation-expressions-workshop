@@ -32,7 +32,12 @@ Generating IL at runtime is something of an artform, but rarely do .NET develope
 
 ## Saturn
 
+[Saturn](https://saturnframework.org/) is an MVC-style framework built on top of [Giraffe](https://github.com/giraffe-fsharp/Giraffe)'s `HttpHandler`, or `HttpContext -> Async<HttpContext option>`. It provides a number of eDSLs for composing applications from various parts, each easily composed alongside standard `HttpHandler`s.
 
+* [`ControllerBuilder`](https://github.com/SaturnFramework/Saturn/blob/master/src/Saturn/Controller.fs)
+* [`ApplicationBuilder`](https://github.com/SaturnFramework/Saturn/blob/master/src/Saturn/Application.fs)
+* [`PipelineBuilder`](https://github.com/SaturnFramework/Saturn/blob/master/src/Saturn/Pipelines.fs)
+* [`RouterBuilder`](https://github.com/SaturnFramework/Saturn/blob/master/src/Saturn/Router.fs)
 
 ## Freya
 
@@ -48,12 +53,109 @@ Generating IL at runtime is something of an artform, but rarely do .NET develope
 
 ### Machines
 
-
+* [`HttpMachineBuilder`](https://github.com/xyncro/freya-machines/blob/master/src/Freya.Machines.Http/Expression.fs) inherits from [`ConfigurationBuilder`](https://github.com/xyncro/freya-core/blob/master/src/Freya.Core/Configuration.fs)
+* [`Freya.Machines.Http.Cors`](https://github.com/xyncro/freya-machines/blob/master/src/Freya.Machines.Http.Cors/Expression.fs) is a library of extensions for `HttpMachineBuilder`
 
 ### Overloading
 
+One of the most interesting aspects of Freya is how it manages to get around the restriction of overloading `CustomOperation`s. Freya leverages [Statically Resolved Type Parameters](), or SRTP, to provide an inference mechanism. Here's an [example from the `Freya.Machines.Http` library](https://github.com/xyncro/freya-machines/blob/master/src/Freya.Machines.Http/Inference.fs#L17-L47):
 
+``` fsharp
+module Inference =
+
+    [<RequireQualifiedAccess>]
+    [<CompilationRepresentation (CompilationRepresentationFlags.ModuleSuffix)>]
+    module DateTime =
+
+        (* Inference *)
+
+        [<RequireQualifiedAccess>]
+        module Inference =
+
+            type Defaults =
+                | Defaults
+
+                static member DateTime (x: Freya<DateTime>) =
+                    Dynamic x
+
+                static member DateTime (x: DateTime) =
+                    Static x
+
+            let inline defaults (a: ^a, _: ^b) =
+                ((^a or ^b) : (static member DateTime: ^a -> Value<DateTime>) a)
+
+            let inline infer (x: 'a) =
+                defaults (x, Defaults)
+
+        let inline infer v =
+            Inference.infer v
+```
+
+Going back to our `Extensions` section, would it be possible to support `Task<'T>` in
+
+``` fsharp
+async {
+    for x in task1 do
+    ``and!`` y in task2
+    return x + y
+}
+```
+
+Open your `Extensions.fs` again, and add the following just above your tests:
+
+``` fsharp
+module Asyncs =
+    [<RequireQualifiedAccess>]
+    module Inference =
+        type Defaults =
+            | Defaults
+            static member Asyncs (x:Async<_>) = x
+            static member Asyncs (x:System.Threading.Tasks.Task<_>) =
+                Async.AwaitTask x
+        let inline defaults (a: ^a, _: ^b) =
+            ((^a or ^b) : (static member Asyncs: ^a -> Async<_>) a)
+        let inline infer (x: ^a) =
+            defaults (x, Defaults)
+        
+    let inline infer v =
+        Inference.infer v
+
+type Microsoft.FSharp.Control.AsyncBuilder with
+    member inline __.Merge(x, y, [<ProjectionParameter>] resultSelector) =
+        async {
+            let x' = Asyncs.infer x |> Async.StartAsTask
+            let y' = Asyncs.infer y |> Async.StartAsTask
+            do System.Threading.Tasks.Task.WaitAll(x',y')
+            return resultSelector x'.Result y'.Result
+        }
+```
+
+Add the following test:
+
+``` fsharp
+        test "concurrent task execution within async" {
+            let expected = 3
+            let parallel =
+                async {
+                    for a in System.Threading.Tasks.Task.FromResult(1) do
+                    ``and!`` b in System.Threading.Tasks.Task.FromResult(2)
+                    return a + b
+                }
+            let actual = Async.RunSynchronously parallel
+            Expect.equal actual expected "Expected actual to equal 3"
+        }
+```
+
+Running `dotnet test` should show all tests passing.
 
 ## Review
 
+In this section, we spent most of our time reviewing other projects that leverage CEs and `CustomOperation`s to create embedded domain specific languages. However, we didn't write a lot of code, as it's not easy to create examples outside a specific use case.
 
+In order to resolve this state of affairs, the remaining time is left to you to create your own computation expression to practice what you've learned. Feel free to use any idea you have, pair up with others, ask for help, etc.
+
+If you don't have an idea of your own, we have two problems prepared that you can work through:
+
+1. [Fizz-Buzz](https://blog.codinghorror.com/why-cant-programmers-program/) checker - create an eDSL that let's you write the expected output of Fizz-Buzz and check the results. This is a play on a classic interview question to turn the tables and turn this into a game, i.e. "Are you smarter than a Fizz-Buzz?"
+2. Conditional Probabilities - implement multiple strategies for determining probability  using a standard interface, and write expressions that accept the builder interface as a parameter, rather than using a value. For example, one implementation may output the list of all the possibilities, and another can randomly select a possibility at each point. ([Proposed](https://twitter.com/mavnn/status/999974726587076609) by [Michael Newton](https://twitter.com/mavnn))
+3. Generate a computation expression from a Type Provider (an inverse of the post [Managing Mutable State With Computational Expressions](http://blog.mavnn.co.uk/managing-mutable-state-with-computational-expressions/))

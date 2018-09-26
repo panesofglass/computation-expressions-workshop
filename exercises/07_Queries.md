@@ -445,13 +445,15 @@ The compiler helpfully informs us, `The operator 'groupBy' does not accept the u
 
 Joins are used to find the intersection of two data sets based on a `predicate` that links the two data sets to gether. The results of joins may be grouped using `into` like `groupBy`. However, joins are special enough to require their own parameter. **The `IsLikeJoin` parameter in the `CustomOperation` attribute provides all the context necessary for the compiler to understand how to process a join. You also need to specify the `JoinConditionWord`, e.g. "on".**
 
+> **NOTE:** the `JoinConditionWord` is important to remember. At some point in the past, this appears to have been defaulted to `"on"`; however, the current `FSharp.Core` defaults this parameter to `""`. You will only see a type error at present.
+
 ``` fsharp
 type RxQueryBuilder with
     [<CustomOperation("join", IsLikeJoin=true, JoinConditionWord="on")>]
     member __.Join (s1:IObservable<_>, s2:IObservable<_>,
-        [<ProjectionParameter>] s1KeySelector : _ -> _,
-        [<ProjectionParameter>] s2KeySelector : _ -> _,
-        [<ProjectionParameter>] resultSelector : _ -> _) =
+                    [<ProjectionParameter>] s1KeySelector : _ -> _,
+                    [<ProjectionParameter>] s2KeySelector : _ -> _,
+                    [<ProjectionParameter>] resultSelector : _ -> _) =
         s1.Join(s2,
             new Func<_,_>(s1KeySelector),
             new Func<_,_>(s2KeySelector),
@@ -477,8 +479,39 @@ The `Join` method takes two observables, a key selector function for each observ
         }
 ```
 
-### `Zip` and `ForkJoin`
+This test should compile and pass with `dotnet test`.
 
+### `Zip`
+
+Joins are not the only way to combine values. You can also zip two sources together or even split them apart and reassemble them, i.e. forkjoin. Rx helpfully provides methods for both of these tasks. `CustomOperation` also provides an `IsLikeZip` parameter to indicate this behavior should be used. **The `IsLikeZip` parameter, seen earlier in `Extensions`, informs the compiler that each element of two sources should be paired together.**
+
+Unlike `Join`, setting the `IsLikeZip=true` is sufficient to trigger the correct behavior:
+
+``` fsharp
+    [<CustomOperation("zip", IsLikeZip=true)>]
+    member __.Zip (s1:IObservable<_>, s2:IObservable<_>,
+                   [<ProjectionParameter>] resultSelector : _ -> _) =
+        s1.Zip(s2,new Func<_,_,_>(resultSelector))
+```
+
+This successfully allows the following test to pass with `dotnet test`:
+
+``` fsharp
+        test "rxquery can zip two observables" {
+            let expected = [|1,3;2,4;3,5;4,6;5,7|]
+            let actual = ResizeArray<int * int>()
+            let source1 = Observable.Range(1, 5)
+            let source2 = Observable.Range(3, 5)
+            use disp =
+                rxquery {
+                    for x in source1 do
+                    zip y in source2
+                    select (x,y)
+                }
+                |> Observable.subscribe actual.Add
+            Expect.equal (actual.ToArray()) expected "Expected join to produce [|1,3;2,4;3,5;4,6;5,7|]"
+        }
+```
 
 ## Understanding Restrictions
 

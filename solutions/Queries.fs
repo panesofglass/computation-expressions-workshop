@@ -46,68 +46,18 @@ type RxQueryBuilder() =
 
     [<CustomOperation("join", IsLikeJoin=true, JoinConditionWord="on")>]
     member __.Join (s1:IObservable<_>, s2:IObservable<_>,
-        [<ProjectionParameter>] s1KeySelector : _ -> _,
-        [<ProjectionParameter>] s2KeySelector : _ -> _,
-        [<ProjectionParameter>] resultSelector : _ -> _) =
+                    [<ProjectionParameter>] s1KeySelector : _ -> _,
+                    [<ProjectionParameter>] s2KeySelector : _ -> _,
+                    [<ProjectionParameter>] resultSelector : _ -> _) =
         s1.Join(s2,
             new Func<_,_>(s1KeySelector),
             new Func<_,_>(s2KeySelector),
             new Func<_,_,_>(resultSelector))
 
-(*
-    [<CustomOperation("takeWhile", MaintainsVariableSpace=true, AllowIntoPattern=true)>]
-    member __.TakeWhile (s:IObservable<_>, [<ProjectionParameter>] predicate : _ -> bool ) = s.TakeWhile(predicate)
-    [<CustomOperation("take", MaintainsVariableSpace=true, AllowIntoPattern=true)>]
-    member __.Take (s:IObservable<_>, count: int) = s.Take(count)
-    [<CustomOperation("skipWhile", MaintainsVariableSpace=true, AllowIntoPattern=true)>]
-    member __.SkipWhile (s:IObservable<_>, [<ProjectionParameter>] predicate : _ -> bool ) = s.SkipWhile(predicate)
-    [<CustomOperation("skip", MaintainsVariableSpace=true, AllowIntoPattern=true)>]
-    member __.Skip (s:IObservable<_>, count: int) = s.Skip(count)
-    [<CustomOperation("count")>]
-    member __.Count (s:IObservable<_>) = Observable.Count(s)
-    [<CustomOperation("all")>]
-    member __.All (s:IObservable<_>, [<ProjectionParameter>] predicate : _ -> bool ) = s.All(new Func<_,bool>(predicate))
-    [<CustomOperation("contains")>]
-    member __.Contains (s:IObservable<_>, key) = s.Contains(key)
-    [<CustomOperation("distinct", MaintainsVariableSpace=true, AllowIntoPattern=true)>]
-    member __.Distinct (s:IObservable<_>) = s.Distinct()
-    [<CustomOperation("exactlyOne")>]
-    member __.ExactlyOne (s:IObservable<_>) = s.SingleAsync()
-    [<CustomOperation("exactlyOneOrDefault")>]
-    member __.ExactlyOneOrDefault (s:IObservable<_>) = s.SingleOrDefaultAsync()
-    [<CustomOperation("find")>]
-    member __.Find (s:IObservable<_>, [<ProjectionParameter>] predicate : _ -> bool) = s.FirstAsync(new Func<_,bool>(predicate))
-    [<CustomOperation("head")>]
-    member __.Head (s:IObservable<_>) = s.FirstAsync()
-    [<CustomOperation("headOrDefault")>]
-    member __.HeadOrDefault (s:IObservable<_>) = s.FirstOrDefaultAsync()
-    [<CustomOperation("last")>]
-    member __.Last (s:IObservable<_>) = s.LastAsync()
-    [<CustomOperation("lastOrDefault")>]
-    member __.LastOrDefault (s:IObservable<_>) = s.LastOrDefaultAsync()
-    [<CustomOperation("maxBy")>]
-    member __.MaxBy (s:IObservable<'a>,  [<ProjectionParameter>] valueSelector : 'a -> 'b) = s.MaxBy(new Func<'a,'b>(valueSelector))
-    [<CustomOperation("minBy")>]
-    member __.MinBy (s:IObservable<'a>,  [<ProjectionParameter>] valueSelector : 'a -> 'b) = s.MinBy(new Func<'a,'b>(valueSelector))
-    [<CustomOperation("nth")>]
-    member __.Nth (s:IObservable<'a>,  index ) = s.ElementAt(index)
-    [<CustomOperation("sumBy")>]
-    member inline __.SumBy (s:IObservable<_>,[<ProjectionParameter>] valueSelector : _ -> _) = s.Select(valueSelector).Aggregate(Unchecked.defaultof<_>, new Func<_,_,_>( fun a b -> a + b)) 
-    [<CustomOperation("groupBy", AllowIntoPattern=true)>]
-    member __.GroupBy (s:IObservable<_>,[<ProjectionParameter>] keySelector : _ -> _) = s.GroupBy(new Func<_,_>(keySelector))
-    [<CustomOperation("groupValBy", AllowIntoPattern=true)>]
-    member __.GroupValBy (s:IObservable<_>,[<ProjectionParameter>] resultSelector : _ -> _,[<ProjectionParameter>] keySelector : _ -> _) = s.GroupBy(new Func<_,_>(keySelector),new Func<_,_>(resultSelector))
-    [<CustomOperation("join", IsLikeJoin=true)>]
-    member __.Join (s1:IObservable<_>,s2:IObservable<_>, [<ProjectionParameter>] s1KeySelector : _ -> _,[<ProjectionParameter>] s2KeySelector : _ -> _,[<ProjectionParameter>] resultSelector : _ -> _) = s1.Join(s2,new Func<_,_>(s1KeySelector),new Func<_,_>(s2KeySelector),new Func<_,_,_>(resultSelector))
-    [<CustomOperation("groupJoin", AllowIntoPattern=true)>]
-    member __.GroupJoin (s1:IObservable<_>,s2:IObservable<_>, [<ProjectionParameter>] s1KeySelector : _ -> _,[<ProjectionParameter>] s2KeySelector : _ -> _,[<ProjectionParameter>] resultSelector : _ -> _) = s1.GroupJoin(s2,new Func<_,_>(s1KeySelector),new Func<_,_>(s2KeySelector),new Func<_,_,_>(resultSelector))
     [<CustomOperation("zip", IsLikeZip=true)>]
-    member __.Zip (s1:IObservable<_>,s2:IObservable<_>,[<ProjectionParameter>] resultSelector : _ -> _) = s1.Zip(s2,new Func<_,_,_>(resultSelector))
-    //[<CustomOperation("forkJoin", IsLikeZip=true)>]
-    //member __.ForkJoin (s1:IObservable<_>,s2:IObservable<_>,[<ProjectionParameter>] resultSelector : _ -> _) = s1.ForkJoin(s2,new Func<_,_,_>(resultSelector))
-    [<CustomOperation("iter")>]
-    member __.Iter(s:IObservable<_>, [<ProjectionParameter>] selector : _ -> _) = s.Do(selector)
-*)
+    member __.Zip (s1:IObservable<_>, s2:IObservable<_>,
+                   [<ProjectionParameter>] resultSelector : _ -> _) =
+        s1.Zip(s2,new Func<_,_,_>(resultSelector))
 
 let rxquery = RxQueryBuilder()
 
@@ -246,5 +196,20 @@ let tests =
                 }
                 |> Observable.subscribe actual.Add
             Expect.equal (actual.ToArray()) expected "Expected join to produce [|3;4;5|]"
+        }
+
+        test "rxquery can zip two observables" {
+            let expected = [|1,3;2,4;3,5;4,6;5,7|]
+            let actual = ResizeArray<int * int>()
+            let source1 = Observable.Range(1, 5)
+            let source2 = Observable.Range(3, 5)
+            use disp =
+                rxquery {
+                    for x in source1 do
+                    zip y in source2
+                    select (x,y)
+                }
+                |> Observable.subscribe actual.Add
+            Expect.equal (actual.ToArray()) expected "Expected join to produce [|1,3;2,4;3,5;4,6;5,7|]"
         }
     ]

@@ -182,7 +182,7 @@ let tests =
                 |> Observable.subscribe actual.Add
             Expect.equal (actual.ToArray()) expected "Expected where to filter input"
         }
-
+(*
         test "rxquery can join two observables" {
             let expected = [|3;4;5|]
             let actual = ResizeArray<int>()
@@ -197,7 +197,7 @@ let tests =
                 |> Observable.subscribe actual.Add
             Expect.equal (actual.ToArray()) expected "Expected join to produce [|3;4;5|]"
         }
-
+*)
         test "rxquery can zip two observables" {
             let expected = [|1,3;2,4;3,5;4,6;5,7|]
             let actual = ResizeArray<int * int>()

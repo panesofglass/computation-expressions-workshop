@@ -63,29 +63,23 @@ type Microsoft.FSharp.Control.AsyncBuilder with
     member this.For(m, f) = this.Bind(m, f)
 
 // From 08_EDSLs.md
-module Asyncs =
-    [<RequireQualifiedAccess>]
-    module Inference =
-        type Defaults =
-            | Defaults
-            static member Asyncs (x:Async<_>) = x
-            static member Asyncs (x:System.Threading.Tasks.Task<_>) =
-                Async.AwaitTask x
-        let inline defaults (a: ^a, _: ^b) =
-            ((^a or ^b) : (static member Asyncs: ^a -> Async<_>) a)
-        let inline infer (x: ^a) =
-            defaults (x, Defaults)
-        
-    let inline infer v =
-        Inference.infer v
-
 type Microsoft.FSharp.Control.AsyncBuilder with
-    member inline __.Merge(x, y, [<ProjectionParameter>] resultSelector) =
+    member __.Merge(x:Async<'a>, y:System.Threading.Tasks.Task<'b>, [<ProjectionParameter>] resultSelector) =
         async {
-            let x' = Asyncs.infer x |> Async.StartAsTask
-            let y' = Asyncs.infer y |> Async.StartAsTask
-            do System.Threading.Tasks.Task.WaitAll(x',y')
-            return resultSelector x'.Result y'.Result
+            let x' = Async.StartAsTask x
+            do System.Threading.Tasks.Task.WaitAll(x',y)
+            return resultSelector x'.Result y.Result
+        }
+    member __.Merge(x:System.Threading.Tasks.Task<'a>, y:Async<'b>, [<ProjectionParameter>] resultSelector) =
+        async {
+            let y' = Async.StartAsTask y
+            do System.Threading.Tasks.Task.WaitAll(x,y')
+            return resultSelector x.Result y'.Result
+        }
+    member __.Merge(x:System.Threading.Tasks.Task<'a>, y:System.Threading.Tasks.Task<'b>, [<ProjectionParameter>] resultSelector) =
+        async {
+            do System.Threading.Tasks.Task.WaitAll(x,y)
+            return resultSelector x.Result y.Result
         }
 
 [<Tests>]
@@ -138,13 +132,13 @@ let tests =
 
         test "concurrent async execution" {
             let expected = 3
-            let parallel =
+            let concurrent =
                 async {
                     for a in async.Return(1) do
                     ``and!`` b in async.Return(2)
                     return a + b
                 }
-            let actual = Async.RunSynchronously parallel
+            let actual = Async.RunSynchronously concurrent
             Expect.equal actual expected "Expected actual to equal 3"
         }
 
@@ -169,36 +163,60 @@ let tests =
                     return a + b
                 }
                 |> Async.RunSynchronously
-            let parallelStopwatch = System.Diagnostics.Stopwatch()
-            let parallel =
+            let concurrentStopwatch = System.Diagnostics.Stopwatch()
+            let concurrent =
                 async {
-                    parallelStopwatch.Start()
+                    concurrentStopwatch.Start()
                     for a in task1 do
                     ``and!`` b in task2
-                    parallelStopwatch.Stop()
+                    concurrentStopwatch.Stop()
                     return a + b
                 }
                 |> Async.RunSynchronously
             printfn "Sequential: %d, Concurrent: %d"
                 sequentialStopwatch.ElapsedMilliseconds
-                parallelStopwatch.ElapsedMilliseconds
-            Expect.equal parallel sequential
-                "Expected parallel result to equal sequential result"
+                concurrentStopwatch.ElapsedMilliseconds
+            Expect.equal concurrent sequential
+                "Expected concurrent result to equal sequential result"
             Expect.isLessThan
-                parallelStopwatch.ElapsedMilliseconds
+                concurrentStopwatch.ElapsedMilliseconds
                 sequentialStopwatch.ElapsedMilliseconds
-                "Expected parallel to be less than sequential"
+                "Expected concurrent to be less than sequential"
         }
 
         test "concurrent task execution within async" {
             let expected = 3
-            let parallel =
+            let concurrent =
                 async {
                     for a in System.Threading.Tasks.Task.FromResult(1) do
                     ``and!`` b in System.Threading.Tasks.Task.FromResult(2)
                     return a + b
                 }
-            let actual = Async.RunSynchronously parallel
+            let actual = Async.RunSynchronously concurrent
+            Expect.equal actual expected "Expected actual to equal 3"
+        }
+
+        test "concurrent async & task execution within async" {
+            let expected = 3
+            let concurrent =
+                async {
+                    for a in async.Return(1) do
+                    ``and!`` b in System.Threading.Tasks.Task.FromResult(2)
+                    return a + b
+                }
+            let actual = Async.RunSynchronously concurrent
+            Expect.equal actual expected "Expected actual to equal 3"
+        }
+
+        test "concurrent task & async execution within async" {
+            let expected = 3
+            let concurrent =
+                async {
+                    for a in System.Threading.Tasks.Task.FromResult(1) do
+                    ``and!`` b in async.Return(2)
+                    return a + b
+                }
+            let actual = Async.RunSynchronously concurrent
             Expect.equal actual expected "Expected actual to equal 3"
         }
     ]

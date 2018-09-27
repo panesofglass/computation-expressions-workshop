@@ -34,7 +34,7 @@ In this exercise, we'll look at the `QueryBuilder` provided by `FSharp.Core`, im
 
 1. Create a new file, `Queries.fs`.
 2. Add the file to your `.fsproj` with `<Compile Include="Queries.fs" />` just below `Extensions.fs`.
-3. Add the following lines to the `Extensions.fs` file:
+3. Add the following lines to the `Queries.fs` file:
 ``` fsharp
 module Queries
 

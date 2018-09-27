@@ -175,12 +175,12 @@ module Option =
 
 We can therefore implement `Bind` as follows:
 ``` fsharp
-    member Bind(m, f) = Option.bind f m // notice the parameter orientation
+    member __.Bind(m, f) = Option.bind f m // notice the parameter orientation
 ```
 
 We could also implement `Bind` like this:
 ``` fsharp
-    member Bind(m:'a option, f:'a -> 'b option) =
+    member __.Bind(m:'a option, f:'a -> 'b option) =
         match m with
         | Some x -> f x
         | None -> None

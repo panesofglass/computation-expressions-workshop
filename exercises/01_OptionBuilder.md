@@ -164,7 +164,7 @@ The compiler informs us that in order to use the `let!` keyword, we must impleme
 
 The F# Language Specification indicates that the `Bind` member should have the following signature (specialized for our immediate use case):
 ``` fsharp
-member Bind : 'a option * ('a -> 'b option) -> 'b option
+member __.Bind : 'a option * ('a -> 'b option) -> 'b option
 ```
 
 As you either know or expect, this matches very closely with the signature of `Option.bind`:

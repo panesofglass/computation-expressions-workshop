@@ -349,7 +349,7 @@ We can add tests for these, as well:
             use disp =
                 rxquery {
                     for x in source do
-                    head
+                    exactlyOne
                 }
                 |> Observable.subscribe (fun i -> actual <- i)
             Expect.equal actual 1 "Expected exactlyOne to return 1"

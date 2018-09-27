@@ -178,7 +178,7 @@ Add overloads of `Bind` in our `Extensions` module to satisfy the tests above. O
 
 ## `CustomOperation`s
 
-Another way to extend a computation expression is with a [`CustomOperation`s](https://docs.microsoft.com/en-us/dotnet/fsharp/language-reference/computation-expressions#custom-operations). We'll see these in greater detail in the next section.
+Another way to extend a computation expression is with a [`CustomOperation`](https://docs.microsoft.com/en-us/dotnet/fsharp/language-reference/computation-expressions#custom-operations). We'll see these in greater detail in the next section.
 
 `CustomOperation`s were introduced in F# 3.0 alongside [Type Providers](https://docs.microsoft.com/en-us/dotnet/fsharp/tutorials/type-providers/) and therefore missed the fanfare they very richly deserve. These let you add custom syntax into your computation expressions, giving you the ability to add new "keywords" into your programs.
 

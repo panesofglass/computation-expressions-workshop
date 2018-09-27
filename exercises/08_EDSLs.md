@@ -101,32 +101,28 @@ async {
 }
 ```
 
+> **NOTE:** It turns out that you don't _need_ this inference mechanism. While `CustomOperation` attributes with the same name may not be used on multiple methods within a class definition, the standard method overloading approach _still_ works.
+
 Open your `Extensions.fs` again, and add the following just above your tests:
 
 ``` fsharp
-module Asyncs =
-    [<RequireQualifiedAccess>]
-    module Inference =
-        type Defaults =
-            | Defaults
-            static member Asyncs (x:Async<_>) = x
-            static member Asyncs (x:System.Threading.Tasks.Task<_>) =
-                Async.AwaitTask x
-        let inline defaults (a: ^a, _: ^b) =
-            ((^a or ^b) : (static member Asyncs: ^a -> Async<_>) a)
-        let inline infer (x: ^a) =
-            defaults (x, Defaults)
-        
-    let inline infer v =
-        Inference.infer v
-
 type Microsoft.FSharp.Control.AsyncBuilder with
-    member inline __.Merge(x, y, [<ProjectionParameter>] resultSelector) =
+    member __.Merge(x:Async<'a>, y:System.Threading.Tasks.Task<'b>, [<ProjectionParameter>] resultSelector) =
         async {
-            let x' = Asyncs.infer x |> Async.StartAsTask
-            let y' = Asyncs.infer y |> Async.StartAsTask
-            do System.Threading.Tasks.Task.WaitAll(x',y')
-            return resultSelector x'.Result y'.Result
+            let x' = Async.StartAsTask x
+            do System.Threading.Tasks.Task.WaitAll(x',y)
+            return resultSelector x'.Result y.Result
+        }
+    member __.Merge(x:System.Threading.Tasks.Task<'a>, y:Async<'b>, [<ProjectionParameter>] resultSelector) =
+        async {
+            let y' = Async.StartAsTask y
+            do System.Threading.Tasks.Task.WaitAll(x,y')
+            return resultSelector x.Result y'.Result
+        }
+    member __.Merge(x:System.Threading.Tasks.Task<'a>, y:System.Threading.Tasks.Task<'b>, [<ProjectionParameter>] resultSelector) =
+        async {
+            do System.Threading.Tasks.Task.WaitAll(x,y)
+            return resultSelector x.Result y.Result
         }
 ```
 
@@ -135,13 +131,37 @@ Add the following test:
 ``` fsharp
         test "concurrent task execution within async" {
             let expected = 3
-            let parallel =
+            let concurrent =
                 async {
                     for a in System.Threading.Tasks.Task.FromResult(1) do
                     ``and!`` b in System.Threading.Tasks.Task.FromResult(2)
                     return a + b
                 }
-            let actual = Async.RunSynchronously parallel
+            let actual = Async.RunSynchronously concurrent
+            Expect.equal actual expected "Expected actual to equal 3"
+        }
+
+        test "concurrent async & task execution within async" {
+            let expected = 3
+            let concurrent =
+                async {
+                    for a in async.Return(1) do
+                    ``and!`` b in System.Threading.Tasks.Task.FromResult(2)
+                    return a + b
+                }
+            let actual = Async.RunSynchronously concurrent
+            Expect.equal actual expected "Expected actual to equal 3"
+        }
+
+        test "concurrent task & async execution within async" {
+            let expected = 3
+            let concurrent =
+                async {
+                    for a in System.Threading.Tasks.Task.FromResult(1) do
+                    ``and!`` b in async.Return(2)
+                    return a + b
+                }
+            let actual = Async.RunSynchronously concurrent
             Expect.equal actual expected "Expected actual to equal 3"
         }
 ```

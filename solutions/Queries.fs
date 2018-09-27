@@ -143,7 +143,7 @@ let tests =
             use disp =
                 rxquery {
                     for x in source do
-                    head
+                    exactlyOne
                 }
                 |> Observable.subscribe (fun i -> actual <- i)
             Expect.equal actual 1 "Expected exactlyOne to return 1"
